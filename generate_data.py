@@ -7,21 +7,6 @@ import networkx as nx
 import datetime
 import copy
 
-# Colors and Triangles datasets can be downloaded at https://gofile.io/?c=zOiltT
-
-# In this file we provide a script to generate data for our Colors dataset:
-# Running 'python data_generate.py' will generate training and test .pkl files in a local directory.
-# For triangles we generate and store files in a similar way and will release the code upon acceptance.
-
-# To load data we use the following code:
-# with open('random_graphs_colors_dim3_train.pkl', 'rb') as f:
-#     Adj_matrices, GT_attn, graph_labels, node_features, n_edges = pickle.load(f)
-# Adj_matrices - list of adjacency matrices
-# GT_attn - ground truth attention for nodes
-# graph_labels - labels of graphs (number of green nodes or triangles)
-# node_features - node features for each graph
-# n_edges - number of edges in each graph (used for statistics)
-
 def parse_args():
     parser = argparse.ArgumentParser(description='Generate synthetic graph datasets')
     parser.add_argument('-D', '--dataset', type=str, default='colors', choices=['colors', 'triangles'])
@@ -140,6 +125,7 @@ def generate_graphs_Colors(N_graphs, N_min, N_max, dim, args, rnd, new_colors=Fa
             'node_features': node_features,
             'N_edges': N_edges}
 
+
 def copy_data(data, idx):
     data_new = {}
     for key in data:
@@ -149,6 +135,7 @@ def copy_data(data, idx):
         print(key, len(data_new[key]))
 
     return data_new
+
 
 def concat_data(data1, data2, data3):
     data_new = {}
@@ -160,6 +147,17 @@ def concat_data(data1, data2, data3):
         print(key, len(data_new[key]))
 
     return data_new
+
+
+def get_graph_triangle(args):
+    N, features_dim, rnd_state, seed = args
+    N_edges = int((rnd_state.rand() + 1) * N)
+    # N_edges = int((rnd_state.rand() * (N / 2 - 1) + 1) * N)
+    # assert N_edges >= N and N_edges <= N ** 2 / 2, (N_edges, N)
+    G, A = graph.random_graph(N, N_edges, seed=None)
+    label = graph.number_of_triangles(A)
+    signal = np.ones((N, 1))
+    return A, label, N_edges, signal, G
 
 if __name__ == '__main__':
 
@@ -173,48 +171,120 @@ if __name__ == '__main__':
 
     rnd = np.random.RandomState(args.seed)
 
-    data = generate_graphs_Colors(args.N_train + args.N_test, args.N_min, args.N_max_train, args.dim, args, rnd)
-    idx = rnd.permutation(len(data['graph_labels']))
-    idx_train = idx[:args.N_train]
-    data_train = copy_data(data, idx_train)
-    print('train orig: %d graphs' % len(idx_train))
-    for i in np.unique(data_train['graph_labels']):
-        print('train orig: label=%d, %d graphs' % (i, np.sum(data_train['graph_labels'] == i)))
-    idx_test = idx[args.N_train: args.N_train + args.N_test]
-    data_test = copy_data(data, idx_test)
-    print('test orig: %d graphs' % len(idx_test))
-    for i in np.unique(data_test['graph_labels']):
-        print('test orig: label=%d, %d graphs' % (i, np.sum(data_test['graph_labels'] == i)))
+    if args.dataset.lower() == 'colors':
 
-    data_large = generate_graphs_Colors(args.N_test, args.N_max_train + 1, args.N_max, args.dim, args, rnd)
-    idx_test = rnd.permutation(len(data_large['graph_labels']))[:args.N_test]
-    data_test_large = copy_data(data_large, idx_test)
-    print('test large: %d graphs' % len(idx_test))
-    for i in np.unique(data_test_large['graph_labels']):
-        print('test large: label=%d, %d graphs' % (i, np.sum(data_test_large['graph_labels'] == i)))
+        data = generate_graphs_Colors(args.N_train + args.N_test, args.N_min, args.N_max_train, args.dim, args, rnd)
+        idx = rnd.permutation(len(data['graph_labels']))
+        idx_train = idx[:args.N_train]
+        data_train = copy_data(data, idx_train)
+        print('train orig: %d graphs' % len(idx_train))
+        for i in np.unique(data_train['graph_labels']):
+            print('train orig: label=%d, %d graphs' % (i, np.sum(data_train['graph_labels'] == i)))
+        idx_test = idx[args.N_train: args.N_train + args.N_test]
+        data_test = copy_data(data, idx_test)
+        print('test orig: %d graphs' % len(idx_test))
+        for i in np.unique(data_test['graph_labels']):
+            print('test orig: label=%d, %d graphs' % (i, np.sum(data_test['graph_labels'] == i)))
 
-    data_large_c = generate_graphs_Colors(args.N_test, args.N_max_train + 1, args.N_max, args.dim + 1, args, rnd, new_colors=True)
+        data_large = generate_graphs_Colors(args.N_test, args.N_max_train + 1, args.N_max, args.dim, args, rnd)
+        idx_test = rnd.permutation(len(data_large['graph_labels']))[:args.N_test]
+        data_test_large = copy_data(data_large, idx_test)
+        print('test large: %d graphs' % len(idx_test))
+        for i in np.unique(data_test_large['graph_labels']):
+            print('test large: label=%d, %d graphs' % (i, np.sum(data_test_large['graph_labels'] == i)))
 
-    idx_test = rnd.permutation(len(data_large_c['graph_labels']))[:args.N_test]
-    data_test_large_c = copy_data(data_large_c, idx_test)
-    print('test large c: %d graphs' % len(idx_test))
-    for i in np.unique(data_test_large_c['graph_labels']):
-        print('test large c: label=%d, %d graphs' % (i, np.sum(data_test_large_c['graph_labels'] == i)))
+        data_large_c = generate_graphs_Colors(args.N_test, args.N_max_train + 1, args.N_max, args.dim + 1, args, rnd, new_colors=True)
 
-
-    check_graph_duplicates(data_train['Adj_matrices'] + data_test['Adj_matrices'] + data_test_large['Adj_matrices'] +
-                           data_test_large_c['Adj_matrices'],
-                           data_train['node_features'] + data_test['node_features'] + data_test_large['node_features'] +
-                           data_test_large_c['node_features'])
+        idx_test = rnd.permutation(len(data_large_c['graph_labels']))[:args.N_test]
+        data_test_large_c = copy_data(data_large_c, idx_test)
+        print('test large c: %d graphs' % len(idx_test))
+        for i in np.unique(data_test_large_c['graph_labels']):
+            print('test large c: label=%d, %d graphs' % (i, np.sum(data_test_large_c['graph_labels'] == i)))
 
 
-    with open('%s/random_graphs_colors_dim%d_train.pkl' % (args.out_dir, args.dim), 'wb') as f:
-        pickle.dump(data_train, f, protocol=2)
+        check_graph_duplicates(data_train['Adj_matrices'] + data_test['Adj_matrices'] + data_test_large['Adj_matrices'] +
+                               data_test_large_c['Adj_matrices'],
+                               data_train['node_features'] + data_test['node_features'] + data_test_large['node_features'] +
+                               data_test_large_c['node_features'])
 
-    data_test = concat_data(data_test, data_test_large, data_test_large_c)
-    with open('%s/random_graphs_colors_dim%d_test.pkl' % (args.out_dir, args.dim), 'wb') as f:
-        pickle.dump(data_test, f, protocol=2)
 
+        with open('%s/random_graphs_colors_dim%d_train.pkl' % (args.out_dir, args.dim), 'wb') as f:
+            pickle.dump(data_train, f, protocol=2)
+
+        data_test = concat_data(data_test, data_test_large, data_test_large_c)
+        with open('%s/random_graphs_colors_dim%d_test.pkl' % (args.out_dir, args.dim), 'wb') as f:
+            pickle.dump(data_test, f, protocol=2)
+
+    elif args.dataset.lower() == 'triangles':
+        N = rnd_state.randint(args.N_min, self.N_nodes_max + 1, size=int(n_samples_total * 10))
+
+        self.A_list, self.signals, self.labels, self.signals_attn = [], [], [], []
+
+        data = []
+        for i in range(len(N)):
+            # print(i, N[i])
+            data.append(get_sample((N[i], self.features_dim, self.rnd_state, self.seed)))
+
+        labels_all = np.array([data[i][1] for i in range(len(N))])
+        n_edges = []
+
+        for i in range(1, rng_values + 1):
+            idx = np.where(labels_all == i)[0]
+
+            # idx = rnd_state.choice(idx, size=int(n_samples / (rng_values)), replace=False)
+            A_list, signals = [], []
+            for j in idx:
+                add = True
+                for k in range(len(A_list)):
+                    if data[j][0].shape[0] == A_list[k].shape[0] and np.allclose(data[j][0], A_list[k]):
+                        if self.triangles or (self.color_features and np.allclose(data[j][3], signals[k])):
+                            add = False
+                            break
+                if add:
+                    A_list.append(data[j][0])
+                    signals.append(data[j][3])
+                    self.labels.append(labels_all[j])
+                    self.A_list.append(data[j][0])
+                    self.signals.append(data[j][3])
+                    if self.triangles:
+                        self.signals_attn.append(graph.node_importance(data[j][4], data[j][0].shape[0]))
+                    else:
+                        self.signals_attn.append(data[j][4])
+
+                    n_edges.append(data[j][2])
+                    # degrees.extend(list(np.sum(data[j][0], 1)))
+
+                    if len(A_list) >= int(n_samples_total / (rng_values)):
+                        break
+            print(i, len(A_list), len(signals), len(idx))
+
+            assert len(A_list) == int(n_samples_total / (rng_values)), (
+            len(A_list), int(n_samples_total / (rng_values)))
+
+        self.labels = np.array(self.labels)
+
+        # check for duplicates (unlikely, but happens)
+        self.check_duplicates(self.A_list, self.signals)
+
+        # shapes = np.array([A.shape[0] for A in self.A_list])
+        # idx = []
+        # for lbl in range(1, rng_values + 1):
+        #     # idx_lbl = np.where(self.labels == lbl)[0]
+        #     idx_lbl = np.where((self.labels == lbl) & (shapes <= self.N_nodes_max))[0]
+        #     # print(lbl, len(idx_lbl))
+        #     if split == 'test':
+        #         idx.extend(list(idx_lbl[:int(n_samples / (rng_values))]))
+        #         idx_lbl = np.where((self.labels == lbl) & (shapes > self.N_nodes_max))[0]
+        #         idx.extend(list(idx_lbl))
+        #     else:
+        #         idx.extend(list(idx_lbl[-int(n_samples / (rng_values)):]))
+        #
+        # if len(idx) > self.n_samples:
+        #     print('%s n samples changed from %d to %d' % (split.upper(), self.n_samples, len(idx)))
+        #     self.n_samples = len(idx)
+
+    else:
+        raise NotImplementedError('unsupported dataset: ' + args.dataset)
 
     print('done in {}'.format(datetime.datetime.now() - dt))
 

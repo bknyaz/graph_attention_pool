@@ -6,25 +6,27 @@ import argparse
 import networkx as nx
 import datetime
 import copy
+import multiprocessing as mp
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Generate synthetic graph datasets')
     parser.add_argument('-D', '--dataset', type=str, default='colors', choices=['colors', 'triangles'])
     parser.add_argument('-o', '--out_dir', type=str, default='./data', help='path where to save superpixels')
-    parser.add_argument('--N_train', type=int, default=500, help='number of training graphs')
-    parser.add_argument('--N_test', type=int, default=2500, help='number of graphs in each test subset')
+    parser.add_argument('--N_train', type=int, default=500, help='number of training graphs (500 for colors and 30000 for triangles)')
+    parser.add_argument('--N_test', type=int, default=2500, help='number of graphs in each test subset (2500 for colors and 5000 for triangles)')
     parser.add_argument('--label_min', type=int, default=0,
-                        help='smallest label value for a graph (i.e. smallest number of green nodes)')
+                        help='smallest label value for a graph (i.e. smallest number of green nodes); 1 for triangles')
     parser.add_argument('--label_max', type=int, default=10,
                         help='largest label value for a graph (i.e. largest number of green nodes)')
     parser.add_argument('--N_min', type=int, default=4, help='minimum number of nodes')
-    parser.add_argument('--N_max', type=int, default=200, help='maximum number of nodes (default: 200 for Colors and 100 for Triangles')
+    parser.add_argument('--N_max', type=int, default=200, help='maximum number of nodes (default: 200 for colors and 100 for triangles')
     parser.add_argument('--N_max_train', type=int, default=25, help='maximum number of nodes in the training set')
     parser.add_argument('--dim', type=int, default=3, help='node feature dimensionality')
     parser.add_argument('--green_ch_index', type=int, default=1,
                         help='index of non-zero value in a one-hot node feature vector, '
                              'i.e. [0, 1, 0] in case green_channel_index=1 and dim=3')
     parser.add_argument('--seed', type=int, default=11, help='seed for shuffling nodes')
+    parser.add_argument('--threads', type=int, default=4, help='only for triangles')
     args = parser.parse_args()
 
     for arg in vars(args):
@@ -33,19 +35,20 @@ def parse_args():
     return args
 
 
-def check_graph_duplicates(Adj_matrices, node_features, triangles=False, colors=False):
+def check_graph_duplicates(Adj_matrices, node_features=None):
     n_graphs = len(Adj_matrices)
     print('check for duplicates for %d graphs' % n_graphs)
     n_duplicates = 0
     for i in range(n_graphs):
-        assert Adj_matrices[i].shape[0] == node_features[i].shape[0], (
-            'invalid data', i, Adj_matrices[i].shape[0], node_features[i].shape[0])
+        if node_features is not None:
+            assert Adj_matrices[i].shape[0] == node_features[i].shape[0], (
+                'invalid data', i, Adj_matrices[i].shape[0], node_features[i].shape[0])
         for j in range(i + 1, n_graphs):
             if Adj_matrices[i].shape[0] == Adj_matrices[j].shape[0]:
                 if np.allclose(Adj_matrices[i], Adj_matrices[j]):  # adjacency matrices are the same
                     # for Colors graphs are not considered duplicates if they have the same adjacency matrix,
                     # but different node features
-                    if triangles or (colors and np.allclose(node_features[i], node_features[j])):
+                    if node_features is None or np.allclose(node_features[i], node_features[j]):
                         n_duplicates += 1
                         print('duplicates %d/%d' % (n_duplicates, n_graphs * (n_graphs - 1) / 2))
     if n_duplicates > 0:
@@ -54,6 +57,18 @@ def check_graph_duplicates(Adj_matrices, node_features, triangles=False, colors=
     print('no duplicated graphs')
 
 
+def copy_data(data, idx):
+    data_new = {}
+    for key in data:
+        data_new[key] = copy.deepcopy([data[key][i] for i in idx])
+        if key in ['graph_labels', 'N_edges']:
+            data_new[key] = np.array(data_new[key], np.int32)
+        print(key, len(data_new[key]))
+
+    return data_new
+
+
+# COLORS
 def get_node_features_Colors(N_nodes, N_green, dim, green_ch_index=1, new_colors=False):
     node_features = np.zeros((N_nodes, dim))
 
@@ -115,8 +130,8 @@ def generate_graphs_Colors(N_graphs, N_min, N_max, dim, args, rnd, new_colors=Fa
                         break
             if c >= n_graphs_per_shape:
                 break
-    graph_labels = np.array(graph_labels).astype(np.int32)
-    N_edges = np.array(N_edges).astype(np.int32)
+    graph_labels = np.array(graph_labels, np.int32)
+    N_edges = np.array(N_edges, np.int32)
     print(N_graphs, len(graph_labels))
 
     return {'Adj_matrices': Adj_matrices,
@@ -126,38 +141,105 @@ def generate_graphs_Colors(N_graphs, N_min, N_max, dim, args, rnd, new_colors=Fa
             'N_edges': N_edges}
 
 
-def copy_data(data, idx):
-    data_new = {}
-    for key in data:
-        data_new[key] = copy.deepcopy([data[key][i] for i in idx])
-        if key in ['graph_labels', 'N_edges']:
-            data_new[key] = np.array(data_new[key]).astype(np.int32)
-        print(key, len(data_new[key]))
-
-    return data_new
-
-
-def concat_data(data1, data2, data3):
-    data_new = {}
-    for key in data1:
-        if key in ['graph_labels', 'N_edges']:
-            data_new[key] = np.concatenate((data1[key], data2[key], data3[key]))
-        else:
-            data_new[key] = data1[key] + data2[key] + data3[key]
-        print(key, len(data_new[key]))
-
-    return data_new
+# TRIANGLES
+def get_gt_atnn_triangles(args):
+    G, N = args
+    node_ids = []
+    if G is not None:
+        for clq in nx.enumerate_all_cliques(G):
+            if len(clq) == 3:
+                node_ids.extend(clq)
+    node_ids = np.array(node_ids)
+    gt_attn = np.zeros((N, 1), np.int32)
+    for i in np.unique(node_ids):
+        gt_attn[i] = int(np.sum(node_ids == i))
+    return gt_attn  # unnormalized (do not sum to 1, i.e. use int32 for storage efficiency)
 
 
-def get_graph_triangle(args):
-    N, features_dim, rnd_state, seed = args
-    N_edges = int((rnd_state.rand() + 1) * N)
-    # N_edges = int((rnd_state.rand() * (N / 2 - 1) + 1) * N)
+def get_graph_triangles(args):
+    N_nodes, rnd = args
+    N_edges = int((rnd.rand() + 1) * N_nodes)
+    # N_edges = int((rnd.rand() * N_nodes + 1) * N_nodes)
+    # N_edges = int((rnd.rand() * (N_nodes / 2 - 1) + 1) * N_nodes)
+    #N_edges = int((rnd.rand() * (N_nodes / 2 - 1) + 1) * N_nodes)
+    #print(N_nodes, N_edges)
     # assert N_edges >= N and N_edges <= N ** 2 / 2, (N_edges, N)
-    G, A = graph.random_graph(N, N_edges, seed=None)
-    label = graph.number_of_triangles(A)
-    signal = np.ones((N, 1))
-    return A, label, N_edges, signal, G
+    # G, A = graph.random_graph(N_nodes, N_edges, seed=None)
+    G = nx.dense_gnm_random_graph(N_nodes, N_edges, seed=None)
+    A = nx.to_numpy_array(G)
+    A_cube = A.dot(A).dot(A)
+    label = int(np.trace(A_cube) / 6.)  # number of triangles
+    return A.astype(np.bool), label, N_edges, G
+
+
+def generate_graphs_Triangles(N_graphs, N_min, N_max, args, rnd):
+    N_nodes = rnd.randint(N_min, N_max + 1, size=int(N_graphs * 10))
+    print('generating %d graphs with %d-%d nodes' % (N_graphs * 10, N_min, N_max))
+    # N_edges = []
+    # for i in range(len(N_nodes)):
+    #     if N_nodes[i]
+    #     N_edges.append(int((rnd.rand() * (N_nodes[i] / 2 - 1) + 1) * N_nodes[i]))
+
+    if args.threads > 0:
+        with mp.Pool(processes=args.threads) as pool:
+            data = pool.map(get_graph_triangles, [(N_nodes[i], rnd) for i in range(len(N_nodes))])
+    else:
+        data = [get_graph_triangles((N_nodes[i], rnd)) for i in range(len(N_nodes))]
+    labels = np.array([data[i][1] for i in range(len(data))], np.int32)
+    Adj_matrices, node_features, G, graph_labels, N_edges = [], [], [], [], []
+    for lbl in range(args.label_min, args.label_max + 1):
+        idx = np.where(labels == lbl)[0]
+        c = 0
+        print(lbl, len(idx))
+        for i in idx:
+            add = True
+            for k in range(len(Adj_matrices)):
+                if data[i][0].shape[0] == Adj_matrices[k].shape[0] and labels[i] == graph_labels[k] and np.allclose(data[i][0], Adj_matrices[k]):
+                    add = False
+                    break
+            if add:
+                Adj_matrices.append(data[i][0])
+                graph_labels.append(labels[i])
+                G.append(data[i][3])
+                N_edges.append(data[i][2])
+                c += 1
+                if c >= int(N_graphs / (args.label_max - args.label_min + 1)):
+                    break
+        print('label={}, number of graphs={}/{}, total number of generated graphs={}'.format(lbl, c, len(idx), len(Adj_matrices)))
+
+        assert c == int(N_graphs / (args.label_max - args.label_min + 1)), (
+            'invalid data', c, int(N_graphs / (args.label_max - args.label_min + 1)))
+
+    print('computing GT attention for %d graphs' % len(Adj_matrices))
+    if args.threads > 0:
+        with mp.Pool(processes=args.threads) as pool:
+            GT_attn = pool.map(get_gt_atnn_triangles, [(G[i], Adj_matrices[i].shape[0]) for i in range(len(Adj_matrices))])
+    else:
+        GT_attn = [get_gt_atnn_triangles((G[i], Adj_matrices[i].shape[0])) for i in range(len(Adj_matrices))]
+
+    graph_labels = np.array(graph_labels, np.int32)
+    N_edges = np.array(N_edges, np.int32)
+
+    return {'Adj_matrices': Adj_matrices,
+            'GT_attn': GT_attn,  # not normalized to sum=1
+            'graph_labels': graph_labels,
+            'N_edges': N_edges}
+
+
+def concat_data(data):
+    data_new = {}
+    for key in data[0]:
+        if key in ['graph_labels', 'N_edges']:
+            data_new[key] = np.concatenate([ d[key] for d in data ])
+        else:
+            lst = []
+            for d in data:
+                lst.extend(d[key])
+            data_new[key] = lst
+        print(key, len(data_new[key]))
+
+    return data_new
+
 
 if __name__ == '__main__':
 
@@ -171,125 +253,70 @@ if __name__ == '__main__':
 
     rnd = np.random.RandomState(args.seed)
 
+    def print_stats(data, split_name):
+        print('%s: %d graphs' % (split_name, len(data['graph_labels'])))
+        for lbl in np.unique(data['graph_labels']):
+            print('%s: label=%d, %d graphs' % (split_name, lbl, np.sum(data['graph_labels'] == lbl)))
+
     if args.dataset.lower() == 'colors':
 
-        data = generate_graphs_Colors(args.N_train + args.N_test, args.N_min, args.N_max_train, args.dim, args, rnd)
-        idx = rnd.permutation(len(data['graph_labels']))
-        idx_train = idx[:args.N_train]
-        data_train = copy_data(data, idx_train)
-        print('train orig: %d graphs' % len(idx_train))
-        for i in np.unique(data_train['graph_labels']):
-            print('train orig: label=%d, %d graphs' % (i, np.sum(data_train['graph_labels'] == i)))
-        idx_test = idx[args.N_train: args.N_train + args.N_test]
-        data_test = copy_data(data, idx_test)
-        print('test orig: %d graphs' % len(idx_test))
-        for i in np.unique(data_test['graph_labels']):
-            print('test orig: label=%d, %d graphs' % (i, np.sum(data_test['graph_labels'] == i)))
+        # Generate train and test sets
+        data_test_combined, Adj_matrices, node_features = [], [], []
+        for N_graphs, N_nodes_min, N_nodes_max, dim, name in zip([args.N_train + args.N_test, args.N_test, args.N_test],
+                                                           [args.N_min, args.N_max_train + 1, args.N_max_train + 1],
+                                                           [args.N_max_train, args.N_max, args.N_max],
+                                                           [args.dim, args.dim, args.dim + 1],
+                                                           ['test orig', 'test large', 'test large-c']):
+            data = generate_graphs_Colors(N_graphs, N_nodes_min, N_nodes_max, dim, args, rnd)
 
-        data_large = generate_graphs_Colors(args.N_test, args.N_max_train + 1, args.N_max, args.dim, args, rnd)
-        idx_test = rnd.permutation(len(data_large['graph_labels']))[:args.N_test]
-        data_test_large = copy_data(data_large, idx_test)
-        print('test large: %d graphs' % len(idx_test))
-        for i in np.unique(data_test_large['graph_labels']):
-            print('test large: label=%d, %d graphs' % (i, np.sum(data_test_large['graph_labels'] == i)))
+            if name.find('orig') >= 0:
+                idx = rnd.permutation(len(data['graph_labels']))
+                data_train = copy_data(data, idx[:args.N_train])
+                print_stats(data_train, name.replace('test', 'train'))
+                node_features += data_train['node_features']
+                Adj_matrices += data_train['Adj_matrices']
+                data_test = copy_data(data, idx[args.N_train: args.N_train + args.N_test])
+            else:
+                data_test = copy_data(data, rnd.permutation(len(data['graph_labels']))[:args.N_test])
 
-        data_large_c = generate_graphs_Colors(args.N_test, args.N_max_train + 1, args.N_max, args.dim + 1, args, rnd, new_colors=True)
+            Adj_matrices += data_test['Adj_matrices']
+            node_features += data_test['node_features']
+            data_test_combined.append(data_test)
+            print_stats(data_test, name)
 
-        idx_test = rnd.permutation(len(data_large_c['graph_labels']))[:args.N_test]
-        data_test_large_c = copy_data(data_large_c, idx_test)
-        print('test large c: %d graphs' % len(idx_test))
-        for i in np.unique(data_test_large_c['graph_labels']):
-            print('test large c: label=%d, %d graphs' % (i, np.sum(data_test_large_c['graph_labels'] == i)))
+        # Check for duplicates in the combined train+test sets
+        check_graph_duplicates(Adj_matrices, node_features)
 
-
-        check_graph_duplicates(data_train['Adj_matrices'] + data_test['Adj_matrices'] + data_test_large['Adj_matrices'] +
-                               data_test_large_c['Adj_matrices'],
-                               data_train['node_features'] + data_test['node_features'] + data_test_large['node_features'] +
-                               data_test_large_c['node_features'])
-
-
+        # Saving
         with open('%s/random_graphs_colors_dim%d_train.pkl' % (args.out_dir, args.dim), 'wb') as f:
             pickle.dump(data_train, f, protocol=2)
 
-        data_test = concat_data(data_test, data_test_large, data_test_large_c)
         with open('%s/random_graphs_colors_dim%d_test.pkl' % (args.out_dir, args.dim), 'wb') as f:
-            pickle.dump(data_test, f, protocol=2)
+            pickle.dump(concat_data(data_test_combined), f, protocol=2)
 
     elif args.dataset.lower() == 'triangles':
-        N = rnd_state.randint(args.N_min, self.N_nodes_max + 1, size=int(n_samples_total * 10))
 
-        self.A_list, self.signals, self.labels, self.signals_attn = [], [], [], []
+        data = generate_graphs_Triangles((args.N_train + args.N_test), args.N_min, args.N_max_train, args, rnd)
+        idx = rnd.permutation(len(data['graph_labels']))
+        data_train = copy_data(data, idx[:args.N_train])
+        print_stats(data_train, 'train orig')
+        data_test = copy_data(data, idx[args.N_train: args.N_train + args.N_test])
+        print_stats(data_test, 'test orig')
 
-        data = []
-        for i in range(len(N)):
-            # print(i, N[i])
-            data.append(get_sample((N[i], self.features_dim, self.rnd_state, self.seed)))
+        data = generate_graphs_Triangles(args.N_test, args.N_max_train + 1, args.N_max, args, rnd)
+        data_test_large = copy_data(data, rnd.permutation(len(data['graph_labels']))[:args.N_test])
+        print_stats(data_test, 'test large')
 
-        labels_all = np.array([data[i][1] for i in range(len(N))])
-        n_edges = []
+        check_graph_duplicates(data_train['Adj_matrices'] + data_test['Adj_matrices'] + data_test_large['Adj_matrices'])
 
-        for i in range(1, rng_values + 1):
-            idx = np.where(labels_all == i)[0]
+        # Saving
+        with open('%s/random_graphs_triangles_train.pkl' % args.out_dir, 'wb') as f:
+            pickle.dump(data_train, f, protocol=2)
 
-            # idx = rnd_state.choice(idx, size=int(n_samples / (rng_values)), replace=False)
-            A_list, signals = [], []
-            for j in idx:
-                add = True
-                for k in range(len(A_list)):
-                    if data[j][0].shape[0] == A_list[k].shape[0] and np.allclose(data[j][0], A_list[k]):
-                        if self.triangles or (self.color_features and np.allclose(data[j][3], signals[k])):
-                            add = False
-                            break
-                if add:
-                    A_list.append(data[j][0])
-                    signals.append(data[j][3])
-                    self.labels.append(labels_all[j])
-                    self.A_list.append(data[j][0])
-                    self.signals.append(data[j][3])
-                    if self.triangles:
-                        self.signals_attn.append(graph.node_importance(data[j][4], data[j][0].shape[0]))
-                    else:
-                        self.signals_attn.append(data[j][4])
-
-                    n_edges.append(data[j][2])
-                    # degrees.extend(list(np.sum(data[j][0], 1)))
-
-                    if len(A_list) >= int(n_samples_total / (rng_values)):
-                        break
-            print(i, len(A_list), len(signals), len(idx))
-
-            assert len(A_list) == int(n_samples_total / (rng_values)), (
-            len(A_list), int(n_samples_total / (rng_values)))
-
-        self.labels = np.array(self.labels)
-
-        # check for duplicates (unlikely, but happens)
-        self.check_duplicates(self.A_list, self.signals)
-
-        # shapes = np.array([A.shape[0] for A in self.A_list])
-        # idx = []
-        # for lbl in range(1, rng_values + 1):
-        #     # idx_lbl = np.where(self.labels == lbl)[0]
-        #     idx_lbl = np.where((self.labels == lbl) & (shapes <= self.N_nodes_max))[0]
-        #     # print(lbl, len(idx_lbl))
-        #     if split == 'test':
-        #         idx.extend(list(idx_lbl[:int(n_samples / (rng_values))]))
-        #         idx_lbl = np.where((self.labels == lbl) & (shapes > self.N_nodes_max))[0]
-        #         idx.extend(list(idx_lbl))
-        #     else:
-        #         idx.extend(list(idx_lbl[-int(n_samples / (rng_values)):]))
-        #
-        # if len(idx) > self.n_samples:
-        #     print('%s n samples changed from %d to %d' % (split.upper(), self.n_samples, len(idx)))
-        #     self.n_samples = len(idx)
+        with open('%s/random_graphs_triangles_test.pkl' % args.out_dir, 'wb') as f:
+            pickle.dump(concat_data((data_test, data_test_large)), f, protocol=2)
 
     else:
         raise NotImplementedError('unsupported dataset: ' + args.dataset)
 
     print('done in {}'.format(datetime.datetime.now() - dt))
-
-
-
-
-
-

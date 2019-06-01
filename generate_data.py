@@ -60,10 +60,33 @@ def check_graph_duplicates(Adj_matrices, node_features=None):
 def copy_data(data, idx):
     data_new = {}
     for key in data:
-        data_new[key] = copy.deepcopy([data[key][i] for i in idx])
-        if key in ['graph_labels', 'N_edges']:
-            data_new[key] = np.array(data_new[key], np.int32)
-        print(key, len(data_new[key]))
+        if key == 'Max_degree':
+            data_new[key] = data[key]
+            print(key, data_new[key])
+        else:
+            data_new[key] = copy.deepcopy([data[key][i] for i in idx])
+            if key in ['graph_labels', 'N_edges']:
+                data_new[key] = np.array(data_new[key], np.int32)
+            print(key, len(data_new[key]))
+
+    return data_new
+
+
+def concat_data(data):
+    data_new = {}
+    for key in data[0]:
+        if key == 'Max_degree':
+            data_new[key] = np.max(np.array([ d[key] for d in data ]))
+            print(key, data_new[key])
+        else:
+            if key in ['graph_labels', 'N_edges']:
+                data_new[key] = np.concatenate([ d[key] for d in data ])
+            else:
+                lst = []
+                for d in data:
+                    lst.extend(d[key])
+                data_new[key] = lst
+            print(key, len(data_new[key]))
 
     return data_new
 
@@ -186,11 +209,10 @@ def generate_graphs_Triangles(N_graphs, N_min, N_max, args, rnd):
     else:
         data = [get_graph_triangles((N_nodes[i], rnd)) for i in range(len(N_nodes))]
     labels = np.array([data[i][1] for i in range(len(data))], np.int32)
-    Adj_matrices, node_features, G, graph_labels, N_edges = [], [], [], [], []
+    Adj_matrices, node_features, G, graph_labels, N_edges, node_degrees = [], [], [], [], [], []
     for lbl in range(args.label_min, args.label_max + 1):
         idx = np.where(labels == lbl)[0]
         c = 0
-        print(lbl, len(idx))
         for i in idx:
             add = True
             for k in range(len(Adj_matrices)):
@@ -202,6 +224,7 @@ def generate_graphs_Triangles(N_graphs, N_min, N_max, args, rnd):
                 graph_labels.append(labels[i])
                 G.append(data[i][3])
                 N_edges.append(data[i][2])
+                node_degrees.append(data[i][0].astype(np.int32).sum(1).max())
                 c += 1
                 if c >= int(N_graphs / (args.label_max - args.label_min + 1)):
                     break
@@ -223,22 +246,8 @@ def generate_graphs_Triangles(N_graphs, N_min, N_max, args, rnd):
     return {'Adj_matrices': Adj_matrices,
             'GT_attn': GT_attn,  # not normalized to sum=1
             'graph_labels': graph_labels,
-            'N_edges': N_edges}
-
-
-def concat_data(data):
-    data_new = {}
-    for key in data[0]:
-        if key in ['graph_labels', 'N_edges']:
-            data_new[key] = np.concatenate([ d[key] for d in data ])
-        else:
-            lst = []
-            for d in data:
-                lst.extend(d[key])
-            data_new[key] = lst
-        print(key, len(data_new[key]))
-
-    return data_new
+            'N_edges': N_edges,
+            'Max_degree': np.max(node_degrees)}
 
 
 if __name__ == '__main__':
@@ -267,7 +276,7 @@ if __name__ == '__main__':
                                                            [args.N_max_train, args.N_max, args.N_max],
                                                            [args.dim, args.dim, args.dim + 1],
                                                            ['test orig', 'test large', 'test large-c']):
-            data = generate_graphs_Colors(N_graphs, N_nodes_min, N_nodes_max, dim, args, rnd)
+            data = generate_graphs_Colors(N_graphs, N_nodes_min, N_nodes_max, dim, args, rnd, new_colors=dim==args.dim + 1)
 
             if name.find('orig') >= 0:
                 idx = rnd.permutation(len(data['graph_labels']))
@@ -297,10 +306,19 @@ if __name__ == '__main__':
     elif args.dataset.lower() == 'triangles':
 
         data = generate_graphs_Triangles((args.N_train + args.N_test), args.N_min, args.N_max_train, args, rnd)
-        idx = rnd.permutation(len(data['graph_labels']))
-        data_train = copy_data(data, idx[:args.N_train])
+        # Create balanced splits
+        idx_train, idx_test = [], [] #rnd.permutation(len(data['graph_labels']))
+        classes = np.unique(data['graph_labels'])
+        n_classes = len(classes)
+        for lbl in classes:
+            idx = np.where(data['graph_labels'] == lbl)[0]
+            rnd.shuffle(idx)
+            n_train = int(args.N_train / n_classes)
+            idx_train.append(idx[:n_train])
+            idx_test.append(idx[n_train: n_train + int(args.N_test / n_classes)])
+        data_train = copy_data(data, np.concatenate(idx_train))
         print_stats(data_train, 'train orig')
-        data_test = copy_data(data, idx[args.N_train: args.N_train + args.N_test])
+        data_test = copy_data(data, np.concatenate(idx_test))
         print_stats(data_test, 'test orig')
 
         data = generate_graphs_Triangles(args.N_test, args.N_max_train + 1, args.N_max, args, rnd)
@@ -310,11 +328,16 @@ if __name__ == '__main__':
         check_graph_duplicates(data_train['Adj_matrices'] + data_test['Adj_matrices'] + data_test_large['Adj_matrices'])
 
         # Saving
+        # Max degree is max over all graphs in the training and test sets
+        max_degree = np.max(np.array([d['Max_degree'] for d in (data_train, data_test, data_test_large)]))
+        data_train['Max_degree'] = max_degree
         with open('%s/random_graphs_triangles_train.pkl' % args.out_dir, 'wb') as f:
             pickle.dump(data_train, f, protocol=2)
 
+        data_test = concat_data((data_test, data_test_large))
+        data_test['Max_degree'] = max_degree
         with open('%s/random_graphs_triangles_test.pkl' % args.out_dir, 'wb') as f:
-            pickle.dump(concat_data((data_test, data_test_large)), f, protocol=2)
+            pickle.dump(data_test, f, protocol=2)
 
     else:
         raise NotImplementedError('unsupported dataset: ' + args.dataset)

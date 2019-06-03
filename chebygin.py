@@ -82,12 +82,13 @@ class ChebyGINLayer(nn.Module):
         :param A: Tensor of size (B,N,N) containing batch (B) of adjacency matrices of shape N,N
         :return: Normalized Laplacian of size (B,N,N)
         '''
-        batch, N = A.shape[:2]
+        B, N = A.shape[:2]
         if add_identity:
             A = A + torch.eye(N, device=A.get_device() if A.is_cuda else 'cpu').unsqueeze(0)
         D = torch.sum(A, 1)  # nodes degree (B,N)
-        D_hat = (D + 1e-5) ** (-0.5)
-        L = D_hat.view(batch, N, 1) * A * D_hat.view(batch, 1, N)
+        D_hat = (D + 1e-7) ** (-0.5)
+        L = D_hat.view(B, N, 1) * A * D_hat.view(B, 1, N)  # B,N,N
+
         if not add_identity:
             L = -L  # for ChebyNet to make a valid Chebyshev basis
         return D, L
@@ -97,7 +98,7 @@ class ChebyGINLayer(nn.Module):
         B, N, F = x.shape
         assert N == A.shape[1] == A.shape[2], ('invalid shape', N, x.shape, A.shape)
 
-        D, L = self.laplacian_batch(A, add_identity=self.K == 1)
+        D, L = self.laplacian_batch(A, add_identity=self.K == 1)  # for the first layer this can be done at the preprocessing stage
         y = self.chebyshev_basis(L, x, self.K)  # B,N,K,F
 
         if self.aggregation == 'sum':
@@ -116,7 +117,7 @@ class ChebyGINLayer(nn.Module):
         if len(mask.shape) == 2:
             mask = mask.unsqueeze(2)
 
-        y = y * mask
+        y = y * mask.float()
 
         return [y, A, mask, *data[3:]]
 
@@ -143,7 +144,7 @@ class GraphReadout(nn.Module):
     def forward(self, data):
         x, A, mask = data[:3]
         x = self.readout_layer(x, mask)
-        return x
+        return [x, *data[1:]]
 
 
 class AttentionPooling(nn.Module):
@@ -156,19 +157,50 @@ class AttentionPooling(nn.Module):
         return 'AttentionPooling({})'.format(self.pool_type)
 
     def forward(self, data):
+        reg = None  # torch.norm(data[0])
+        x, A, mask = data[:3]
+        B, N, F = x.shape
         if self.pool_type[1] == 'gt':
             if 'node_attn' in data[4]:
                 node_attn = data[4]['node_attn']
                 # print(data[0].shape, data[2].shape, node_attn.shape)
-                data[0] = data[0] * node_attn.unsqueeze(2)
+                x = x * node_attn.unsqueeze(2)
                 if len(node_attn.shape) < len(data[2].shape):
                     node_attn = node_attn.unsqueeze(2)
-                data[2] = data[2] * (node_attn > 0).float()
+                mask = mask & (node_attn > 0)
+
             else:
                 raise ValueError('ground truth node attention values node_attn required for this case')
         else:
             raise NotImplementedError('todo')
-        return data
+
+        mask = mask.view(B, N)
+        drop = True
+        if drop:
+            N_nodes = torch.sum(mask, dim=1).long()  # B
+            N_nodes_max = N_nodes.max()
+
+            # Drop nodes
+            # mask, idx = torch.sort(mask, dim=1, descending=True)
+            # idx = idx[:, :N_nodes_max]
+            # mask = mask[:, :N_nodes_max]
+            mask, idx = torch.topk(mask, N_nodes_max, dim=1, largest=True, sorted=False)
+            x = torch.gather(x, dim=1, index=idx.unsqueeze(2).expand(-1, -1, F))
+
+            # Drop edges
+            A = torch.gather(A, 1, idx.unsqueeze(2).expand(-1, -1, N))
+            A = torch.gather(A, 2, idx.unsqueeze(1).expand(-1, N_nodes_max, -1))
+
+        mask_matrix = mask.unsqueeze(2) & mask.unsqueeze(1)
+        A = A * mask_matrix.float()   # or A[~mask_matrix] = 0
+
+        # Add additional losses regularizing the model
+        if 'reg' not in data[4]:
+            data[4]['reg'] = []
+        if reg is not None:
+            data[4]['reg'].append(reg)
+
+        return [x, A, mask, *data[3:]]
 
 
 class ChebyGIN(nn.Module):
@@ -186,14 +218,15 @@ class ChebyGIN(nn.Module):
 
         self.pool = None if pool is None else pool.split('_')
 
-        # Graph convolution layers
         layers = []
         for layer, f in enumerate(filters):
 
+            # Pooling layers
             if len(self.pool) > len(filters) + layer and self.pool[layer + 3] != 'skip':
                 print(self.pool, layer, self.pool[layer], self.pool[layer + 3])
                 layers.append(AttentionPooling(pool_type=self.pool[:3] + [self.pool[layer + 3]]))
 
+            # Graph convolution layers
             layers.append(ChebyGINLayer(in_features=in_features if layer == 0 else filters[layer - 1],
                                                     out_features=f,
                                                     K=K,
@@ -201,21 +234,15 @@ class ChebyGIN(nn.Module):
                                                     aggregation=aggregation,
                                                     activation=nn.ReLU(inplace=True)))
 
-
-        self.layers = nn.Sequential(*layers)
         # Global pooling over nodes
-        self.readout = GraphReadout(readout)
+        layers.append(GraphReadout(readout))
+        self.layers = nn.Sequential(*layers)
 
         # Fully connected (classification/regression) layers
-        fc = []
-        if dropout > 0:
-            fc.append(nn.Dropout(p=dropout))
-        fc.append(nn.Linear(filters[-1], out_features))
-        self.fc = nn.Sequential(*fc)
+        self.fc = nn.Sequential(*(([nn.Dropout(p=dropout)] if dropout > 0 else []) + [nn.Linear(filters[-1], out_features)]))
 
     def forward(self, data):
         data = self.layers(data)
-        B, N, F = data[0].shape  # node features shape
-        x = self.readout(data).view(B, F)  # global pooling over nodes
-        x = self.fc(x)  # B,out_features
-        return x, []
+        x = self.fc(data[0])  # B,out_features
+        reg = data[4]['reg'] if 'reg' in data[4] else []
+        return x, reg

@@ -9,11 +9,12 @@ import platform
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from torch.utils.data.dataloader import default_collate
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
 import torch.optim.lr_scheduler as lr_scheduler
-from torchvision import datasets
+from torchvision import datasets, transforms
 from sklearn.metrics import average_precision_score as avg_precision, roc_auc_score, roc_curve
 import pickle
 import multiprocessing as mp
@@ -111,6 +112,38 @@ def normalize_data(data):
     return data
 
 
+def sanity_check(model, data):
+    output1, other_losses1 = model(data)
+    output2, other_losses2 = model(shuffle_nodes(data))
+    assert torch.allclose(output1, output2, rtol=1e-03, atol=1e-05), torch.norm(output1 - output2)
+    for l1, l2 in zip(other_losses1, other_losses2):
+        assert torch.allclose(l1, l2), (l1, l2)
+    print('model is checked for nodes shuffling')
+
+
+def compute_avg(model, device, train_loader, n_batches=np.Inf):
+    print('computing mean and std of input features')
+    model.eval()
+    x = []
+    with torch.no_grad():
+        for batch_idx, data in enumerate(train_loader):
+            x.append(data[0].view(data[0].size(0), data[0].size(1), -1).data) # B,N,F
+            if batch_idx > n_batches:
+                break
+            del data
+    x = torch.cat(x, dim=1)  # M,N,F
+    print('data read', x.shape)
+
+    mn = x.mean(dim=0, keepdim=True).mean(dim=1, keepdim=True)
+    sd = x.std(dim=0, keepdim=True).std(dim=1, keepdim=True)
+    print('mn', mn.data.cpu().numpy())
+    print('std', sd.data.cpu().numpy())
+    sd[sd < 2e-2] = 1 - 1e-5
+    print('corrected (non zeros) std', sd.data.cpu().numpy())
+    mn = mn.to(args.device)
+    sd = sd.to(args.device)
+    return mn, sd
+
 def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn):
     model.train()
     optimizer.zero_grad()
@@ -118,9 +151,13 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn):
     start = time.time()
 
     for batch_idx, data in enumerate(train_loader):
-        optimizer.zero_grad()
         data = data_to_device(data, device)
         data = normalize_data(data)
+        if batch_idx == 0 and epoch <= 1:
+            sanity_check(model.eval(), data)  # to disable the effect of dropout or other regularizers that can change behavior from batch to batch
+            model.train()
+
+        optimizer.zero_grad()
         output, other_losses = model(data)
         targets = data[3]
         loss = loss_fn(output, targets)
@@ -160,6 +197,9 @@ def test(model, test_loader, epoch, device, loss_fn, set_name, dataset):
         optimizer.zero_grad()
         data = data_to_device(data, device)
         data = normalize_data(data)
+        if batch_idx == 0 and epoch <= 1:
+            sanity_check(model, data)
+
         output, other_losses = model(data)
         loss = loss_fn(output, data[3], reduction='sum')
         for l in other_losses:
@@ -213,18 +253,28 @@ if __name__ == '__main__':
     torch.cuda.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
+    if args.dataset.find('colors') >= 0 or args.dataset == 'triangles':
+        train_dataset = SyntheticGraphs(args.data_dir, args.dataset, 'train')
+        test_dataset = SyntheticGraphs(args.data_dir, args.dataset, 'test')
+        loss_fn = mse_loss
+        collate_fn = collate_batch
+        in_features = train_dataset.feature_dim
+        out_features = 1
+    elif args.dataset == 'mnist':
+        train_dataset = datasets.MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
+        test_dataset = datasets.MNIST(args.data_dir, train=False, download=True, transform=transforms.ToTensor())
+        loss_fn = F.cross_entropy
+        collate_fn = collate_batch_images
+        in_features = 3
+        out_features = 10
+    else:
+        raise NotImplementedError(args.dataset)
 
-    dataset = SyntheticGraphs(args.data_dir, args.dataset, 'train')
-    loss_fn = mse_loss  # F.cross_entropy
-    train_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.threads, collate_fn=collate_batch)
-    test_loader = DataLoader(SyntheticGraphs(args.data_dir, args.dataset, 'test'),
-                              batch_size=args.test_batch_size,
-                              shuffle=False,
-                              num_workers=args.threads,
-                              collate_fn=collate_batch)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.threads, collate_fn=collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
 
-    model = ChebyGIN(in_features=dataset.feature_dim,
-                     out_features=1,  # # dataset.n_classes
+    model = ChebyGIN(in_features=in_features,
+                     out_features=out_features,
                      filters=args.filters,
                      K=args.filter_scale,
                      n_hidden=args.n_hidden,
@@ -246,7 +296,7 @@ if __name__ == '__main__':
         betas=(0.5, 0.999))
     scheduler = lr_scheduler.MultiStepLR(optimizer, args.lr_decay_step, gamma=0.1)
 
-    for epoch in range(args.epochs):
+    for epoch in range(1, args.epochs + 1):
         scheduler.step()
         train_loss, acc = train(model, train_loader, optimizer, epoch, args.device, args.log_interval, loss_fn)
         test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'test', args.dataset)

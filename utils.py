@@ -1,9 +1,21 @@
 import numpy as np
 import pandas as pd
 import cv2
+import os
 import torch
 import copy
 import torch.nn.functional as F
+
+
+def load_save_noise(f, noise_shape):
+    if os.path.isfile(f):
+        print('loading noise from %s' % f)
+        noises = torch.load(f)
+    else:
+        noises = torch.randn(noise_shape, dtype=torch.float)
+        # np.save(f, noises.numpy())
+        torch.save(noises, f)
+    return noises
 
 
 def list_to_torch(data):

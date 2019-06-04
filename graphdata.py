@@ -11,21 +11,25 @@ from scipy.spatial.distance import cdist
 from utils import *
 
 
-def precompute_graph_images(img_size):
-    col, row = np.meshgrid(np.arange(img_size), np.arange(img_size))
-    coord = np.stack((col, row), axis=2)  # 28,28,2
-    coord = coord.reshape(-1, 2) / img_size
+def comput_adjacency_matrix_images(coord):
+    coord = coord.reshape(-1, 2)
     dist = cdist(coord, coord)
     sigma = 0.1 * np.pi
     A = np.exp(- dist / sigma ** 2)
     A[np.diag_indices_from(A)] = 0
-    A = torch.from_numpy(A).float().unsqueeze(0)
-    coord = torch.from_numpy(coord).float().unsqueeze(0)
+    return A
+
+
+def precompute_graph_images(img_size):
+    col, row = np.meshgrid(np.arange(img_size), np.arange(img_size))
+    coord = np.stack((col, row), axis=2) / img_size  # 28,28,2
+    A = torch.from_numpy(comput_adjacency_matrix_images(coord)).float().unsqueeze(0)
+    coord = torch.from_numpy(coord).float().unsqueeze(0).view(1, -1, 2)
     mask = torch.ones(1, img_size * img_size, dtype=torch.uint8)
     return A, coord, mask
 
 
-def collate_batch_images(batch, A, mask, mean_px_features=True, coord=None):
+def collate_batch_images(batch, A, mask, use_mean_px=True, coord=None):
     '''
     Creates a batch of graphs representing images
     :param batch: batch in the PyTorch Geometric format or [node_features*batch_size, A*batch_size, label*batch_size]
@@ -34,22 +38,24 @@ def collate_batch_images(batch, A, mask, mean_px_features=True, coord=None):
 
     B = len(batch)
     C, H, W = batch[0][0].shape
-    N = H * W
-    params_dict = {'N_nodes': torch.zeros(B, dtype=torch.long) + N}
+    N_nodes = H * W
+    params_dict = {'N_nodes': torch.zeros(B, dtype=torch.long) + N_nodes}
     x = None
-    if mean_px_features:
-        x = torch.stack([batch[b][0].view(C, N).t() for b in range(B)]).float()
-        GT_attn = (x > 0).view(B, N).float()
+    if use_mean_px:
+        x = torch.stack([batch[b][0].view(C, N_nodes).t() for b in range(B)]).float()
+        GT_attn = (x > 0).view(B, N_nodes).float()
         GT_attn = GT_attn / (GT_attn.sum(dim=1, keepdim=True) + 1e-7)
         params_dict.update({'node_attn': GT_attn})
 
     if coord is not None:
-        if mean_px_features:
+        if use_mean_px:
             x = torch.cat((x, coord.expand(B, -1, -1)), dim=2)
         else:
             x = coord.expand(B, -1, -1)
     if x is None:
-        x = torch.ones(B, N, 1)  # dummy features
+        x = torch.ones(B, N_nodes, 1)  # dummy features
+
+    x = F.pad(x, (2, 0), 'replicate')
 
     labels = torch.stack([batch[b][1] for b in range(B)])
 
@@ -96,6 +102,68 @@ def collate_batch(batch):
 
 def stats(arr):
     return np.mean(arr), np.std(arr), np.min(arr), np.max(arr)
+
+
+class MNIST75sp(torch.utils.data.Dataset):
+    def __init__(self,
+                 data_dir,
+                 split,
+                 use_mean_px=True,
+                 use_coord=True):
+
+        self.split = split
+        self.is_test = split.lower() in ['test', 'val']
+        with open(pjoin(data_dir, 'mnist_75sp_%s.pkl' % split), 'rb') as f:
+            self.labels, self.sp_data = pickle.load(f)
+
+        self.use_mean_px = use_mean_px
+        self.use_coord = use_coord
+        self.n_samples = len(self.labels)
+        self.img_size = 28
+
+    def train_val_split(self, samples_idx):
+        self.sp_data = [self.sp_data[i] for i in samples_idx]
+        self.labels = self.labels[samples_idx]
+        self.n_samples = len(self.labels)
+
+    def precompute_graph_images(self):
+        print('precompute all data for the %s set...' % self.split.upper())
+        self.Adj_matrices, self.node_features, self.GT_attn = [], [], []
+        for sample in self.sp_data: #range(len(self.n_samples)):
+            mean_px, coord = sample[:2]
+            coord = coord / self.img_size
+            A = comput_adjacency_matrix_images(coord)
+            N_nodes = A.shape[0]
+            x = None
+            if self.use_mean_px:
+                x = mean_px.reshape(N_nodes, -1)
+            if self.use_coord:
+                coord = coord.reshape(N_nodes, 2)
+                if self.use_mean_px:
+                    x = np.concatenate((x, coord), axis=1)
+                else:
+                    x = coord
+            if x is None:
+                x = np.ones(N_nodes, 1)  # dummy features
+            x = np.pad(x, ((0, 0), (2, 0)), 'edge')
+            gt_attn = (mean_px > 0).astype(np.float32)
+            self.node_features.append(x)
+            self.Adj_matrices.append(A)
+            self.GT_attn.append(gt_attn / (np.sum(gt_attn) + 1e-7))
+
+    def __len__(self):
+        return self.n_samples
+
+    def __getitem__(self, index):
+        data = [self.node_features[index],
+                self.Adj_matrices[index],
+                self.Adj_matrices[index].shape[0],
+                self.labels[index],
+                self.GT_attn[index]]
+
+        data = list_to_torch(data)  # convert to torch
+
+        return data
 
 
 class SyntheticGraphs(torch.utils.data.Dataset):

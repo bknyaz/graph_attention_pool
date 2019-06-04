@@ -297,7 +297,7 @@ if __name__ == '__main__':
         data_train = copy_data(data, np.concatenate(idx_train))
         print_stats(data_train, 'train orig')
         data_val = copy_data(data, np.concatenate(idx_val))
-        print_stats(data_train, 'val orig')
+        print_stats(data_val, 'val orig')
         data_test = copy_data(data, np.concatenate(idx_test))
         print_stats(data_test, 'test orig')
 

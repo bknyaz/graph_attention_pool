@@ -9,18 +9,13 @@ import platform
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.utils.data.dataloader import default_collate
-import torch.nn.functional as F
 import torch.optim as optim
-from torch.autograd import Variable
 import torch.optim.lr_scheduler as lr_scheduler
 from torchvision import datasets, transforms
-from sklearn.metrics import average_precision_score as avg_precision, roc_auc_score, roc_curve
-import pickle
-import multiprocessing as mp
 from chebygin import *
 from graphdata import *
 from utils import *
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Run experiments with Graph Neural Networks')
@@ -44,10 +39,12 @@ def parse_args():
     parser.add_argument('--readout', type=str, default='sum', choices=['mean', 'sum', 'max'], help='type of global pooling over all nodes')
     parser.add_argument('--kl_weight', type=float, default=100, help='weight of the KL term in the loss')
     parser.add_argument('--pool', type=str, default=None, help='type of pooling between layers')
+    parser.add_argument('--pool_arch', type=str, default=None, help='pooling layers architecture')
     parser.add_argument('--img_features', type=str, default='mean,coord', help='which image features to use as node features')
     # Auxiliary arguments
     parser.add_argument('--validation', action='store_true', default=False, help='run in the (cross)validation mode')
-    parser.add_argument('--test_batch_size', type=int, default=32, help='batch size for test data')
+    parser.add_argument('--test_batch_size', type=int, default=100, help='batch size for test data')
+    parser.add_argument('--img_noise_levels', type=str, default='0.75,1.25', help='Gaussian noise standard deviations for grayscale and color image features')
     parser.add_argument('--log_interval', type=int, default=400, help='print interval')
     parser.add_argument('--results', type=str, default='./results',
                         help='directory to save model checkpoints and other results')
@@ -59,6 +56,7 @@ def parse_args():
     args.lr_decay_step = list(map(int, args.lr_decay_step.split(',')))
     args.filters = list(map(int, args.filters.split(',')))
     args.img_features = args.img_features.split(',')
+    args.img_noise_levels = list(map(float, args.img_noise_levels.split(',')))
 
     for arg in vars(args):
         print(arg, getattr(args, arg))
@@ -110,11 +108,13 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
     return train_loss, acc
 
 
-def test(model, test_loader, epoch, device, loss_fn, set_name, dataset, feature_stats=None):
+def test(model, test_loader, epoch, device, loss_fn, set_name, dataset, feature_stats=None, noises=None, img_noise_levels=None):
     model.eval()
     n_samples, correct, test_loss = 0, 0, 0
     pred, targets, N_nodes = [], [], []
     start = time.time()
+
+    ind = np.arange(3)
 
     for batch_idx, data in enumerate(test_loader):
         optimizer.zero_grad()
@@ -123,6 +123,12 @@ def test(model, test_loader, epoch, device, loss_fn, set_name, dataset, feature_
             data[0] = (data[0] - feature_stats[0]) / feature_stats[1]
         if batch_idx == 0 and epoch <= 1:
             sanity_check(model, data)
+
+        if noises is not None:
+            noise = noises[n_samples:n_samples + len(data[0])].to(device) * img_noise_levels
+            if len(noise.shape) == 2:
+                noise = noise.unsqueeze(2)
+            data[0][:, :, ind] = data[0][:, :, ind] + noise
 
         output, other_losses = model(data)
         loss = loss_fn(output, data[3], reduction='sum')
@@ -133,6 +139,9 @@ def test(model, test_loader, epoch, device, loss_fn, set_name, dataset, feature_
         targets.append(data[3].detach())
         N_nodes.append(data[4]['N_nodes'])
 
+        n_samples += len(data[0])
+
+    assert n_samples == len(test_loader.dataset), (n_samples, len(test_loader.dataset))
 
     pred = torch.cat(pred)
     targets = torch.cat(targets)
@@ -151,7 +160,6 @@ def test(model, test_loader, epoch, device, loss_fn, set_name, dataset, feature_
 
     time_iter = time.time() - start
 
-    n_samples = len(test_loader.dataset)
     test_loss_avg = test_loss / n_samples
     acc = 100. * correct / n_samples  # average over all examples in the dataset
 
@@ -186,25 +194,52 @@ if __name__ == '__main__':
         collate_fn = collate_batch
         in_features = train_dataset.feature_dim
         out_features = 1
-    elif args.dataset == 'mnist':
-        train_dataset = datasets.MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
+    elif args.dataset in ['mnist', 'mnist-75sp']:
+        use_mean_px = 'mean' in args.img_features
+        use_coord = 'coord' in args.img_features
+        if args.dataset == 'mnist':
+            train_dataset = datasets.MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
+        else:
+            train_dataset = MNIST75sp(args.data_dir, split='train', use_mean_px=use_mean_px, use_coord=use_coord)
+
         if args.validation:
             n_val = 5000
-            train_dataset.train_data = train_dataset.train_data[:-n_val]
-            train_dataset.train_labels = train_dataset.train_labels[:-n_val]
-            print(train_dataset.train_data.shape, len(train_dataset.train_labels))
-            test_dataset = datasets.MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
-            test_dataset.train_data = train_dataset.train_data[-n_val:]
-            test_dataset.train_labels = train_dataset.train_labels[-n_val:]
-            print(test_dataset.train_data.shape, len(test_dataset.train_labels))
+            if args.dataset == 'mnist':
+                train_dataset.train_data = train_dataset.train_data[:-n_val]
+                train_dataset.train_labels = train_dataset.train_labels[:-n_val]
+                test_dataset = datasets.MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
+                test_dataset.train_data = train_dataset.train_data[-n_val:]
+                test_dataset.train_labels = train_dataset.train_labels[-n_val:]
+            else:
+                train_dataset.train_val_split(np.arange(0, train_dataset.n_samples - n_val))
+                test_dataset = MNIST75sp(args.data_dir, split='train', use_mean_px=use_mean_px, use_coord=use_coord)
+                test_dataset.train_val_split(np.arange(train_dataset.n_samples - n_val, train_dataset.n_samples))
         else:
-            test_dataset = datasets.MNIST(args.data_dir, train=False, download=True, transform=transforms.ToTensor())
+            noise_file = pjoin(args.data_dir, '%s_noise.pt' % args.dataset.replace('-', '_'))
+            color_noise_file = pjoin(args.data_dir, '%s_color_noise.pt' % args.dataset.replace('-', '_'))
+            if args.dataset == 'mnist':
+                test_dataset = datasets.MNIST(args.data_dir, train=False, download=True, transform=transforms.ToTensor())
+                noise_shape = (len(test_dataset.test_labels), 28 * 28)
+            else:
+                test_dataset = MNIST75sp(args.data_dir, split='test', use_mean_px=use_mean_px, use_coord=use_coord)
+                noise_shape = (len(test_dataset.labels), 75)
+
+            # Generate/load noise (save it to make reproducible)
+            noises = load_save_noise(noise_file, noise_shape)
+            color_noises = load_save_noise(color_noise_file, (*(noise_shape), 3))
+
+        if args.dataset == 'mnist':
+            A, coord, mask = precompute_graph_images(train_dataset.train_data.shape[1])
+            collate_fn = lambda batch: collate_batch_images(batch, A, mask, use_mean_px=use_mean_px,
+                                                            coord=coord if use_coord else None)
+        else:
+            train_dataset.precompute_graph_images()
+            test_dataset.precompute_graph_images()
+            collate_fn = collate_batch
+
         loss_fn = F.cross_entropy
-        A, coord, mask = precompute_graph_images(train_dataset.train_data.shape[1])
-        collate_fn = lambda batch: collate_batch_images(batch, A, mask,
-                                                        mean_px_features='mean' in args.img_features,
-                                                        coord=coord if 'coord' in args.img_features else None)
-        in_features = 0
+
+        in_features = 2
         for features in args.img_features:
             if features == 'mean':
                 in_features += 1
@@ -228,7 +263,9 @@ if __name__ == '__main__':
                      aggregation=args.aggregation,
                      dropout=args.dropout,
                      readout=args.readout,
-                     pool=args.pool)
+                     pool=args.pool,
+                     pool_arch=args.pool_arch,
+                     kl_weight=args.kl_weight)
     print(model)
     # Compute the total number of trainable parameters
     print('model capacity: %d' %
@@ -240,7 +277,7 @@ if __name__ == '__main__':
     scheduler = lr_scheduler.MultiStepLR(optimizer, args.lr_decay_step, gamma=0.1)
 
     feature_stats = None
-    if args.dataset == 'mnist':
+    if args.dataset in ['mnist', 'mnist-75sp']:
         feature_stats = compute_feature_stats(model, train_loader, args.device, n_batches=1000)
 
     for epoch in range(1, args.epochs + 1):
@@ -248,12 +285,13 @@ if __name__ == '__main__':
         train_loss, acc = train(model, train_loader, optimizer, epoch, args.device, args.log_interval, loss_fn, feature_stats)
         if args.validation:
             test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'val', args.dataset, feature_stats)
-        elif epoch == 1:
-            # just to make sure that the test function works fine for this test set before training all the way until the last epoch
+        elif epoch == 1 or epoch == args.epochs:
+            # check for epoch == 1 just to make sure that the test function works fine for this test set before training all the way until the last epoch
             test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'test', args.dataset, feature_stats)
-
-    if not args.validation:
-        # Testing
-        test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'test', args.dataset, feature_stats)
+            if args.dataset in ['mnist', 'mnist-75sp']:
+                test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'test', args.dataset,
+                                      feature_stats, noises=noises, img_noise_levels=args.img_noise_levels[0])
+                test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'test', args.dataset,
+                                      feature_stats, noises=color_noises, img_noise_levels=args.img_noise_levels[1])
 
     print('done in {}'.format(datetime.datetime.now() - dt))

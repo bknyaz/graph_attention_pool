@@ -8,40 +8,52 @@ import torch.utils
 import torch.utils.data
 import torch.nn.functional as F
 from scipy.spatial.distance import cdist
-import utils
+from utils import *
 
 
-def collate_batch_images(batch):
+def precompute_graph_images(img_size):
+    col, row = np.meshgrid(np.arange(img_size), np.arange(img_size))
+    coord = np.stack((col, row), axis=2)  # 28,28,2
+    coord = coord.reshape(-1, 2) / img_size
+    dist = cdist(coord, coord)
+    sigma = 0.1 * np.pi
+    A = np.exp(- dist / sigma ** 2)
+    A[np.diag_indices_from(A)] = 0
+    A = torch.from_numpy(A).float().unsqueeze(0)
+    coord = torch.from_numpy(coord).float().unsqueeze(0)
+    mask = torch.ones(1, img_size * img_size, dtype=torch.uint8)
+    return A, coord, mask
+
+
+def collate_batch_images(batch, A, mask, mean_px_features=True, coord=None):
     '''
-    Creates a batch of same size graphs by zero-padding node features and adjacency matrices up to
-    the maximum number of nodes in the CURRENT batch rather than in the entire dataset.
-    Graphs in the batches are usually much smaller than the largest graph in the dataset, so this method is fast.
+    Creates a batch of graphs representing images
     :param batch: batch in the PyTorch Geometric format or [node_features*batch_size, A*batch_size, label*batch_size]
     :return: [node_features, A, graph_support, N_nodes, label]
     '''
 
     B = len(batch)
     C, H, W = batch[0][0].shape
-    col, row = np.meshgrid(np.arange(W), np.arange(H))
-    coord = np.stack((col, row), axis=2)  # 28,28,2
-    coord = coord.reshape(-1, 2) / H
-    dist = cdist(coord, coord)
-    sigma = 0.1 * np.pi
-    A = np.exp(- dist / sigma ** 2)
-    A[np.diag_indices_from(A)] = 0
-    A = torch.from_numpy(A).float().unsqueeze(0).expand(B, -1, -1)
-    x = torch.stack([batch[b][0].permute(0, 2, 1).contiguous().view(C, H*W).t() for b in range(B)]).float()
-    mask = torch.ones(B, H*W, dtype=torch.uint8)
-    params_dict = {'N_nodes': torch.zeros(B, dtype=torch.long) + H*W,
-                   'node_attn': (x > 0).view(B, H*W)}
+    N = H * W
+    params_dict = {'N_nodes': torch.zeros(B, dtype=torch.long) + N}
+    x = None
+    if mean_px_features:
+        x = torch.stack([batch[b][0].view(C, N).t() for b in range(B)]).float()
+        GT_attn = (x > 0).view(B, N).float()
+        GT_attn = GT_attn / (GT_attn.sum(dim=1, keepdim=True) + 1e-7)
+        params_dict.update({'node_attn': GT_attn})
 
-    coord = torch.from_numpy(coord).float().unsqueeze(0).expand(B, -1, -1)
-    # print(x.shape, x.min(), x.max(), coord.min(), coord.max())
-    x = torch.cat((x, coord), dim=2)
+    if coord is not None:
+        if mean_px_features:
+            x = torch.cat((x, coord.expand(B, -1, -1)), dim=2)
+        else:
+            x = coord.expand(B, -1, -1)
+    if x is None:
+        x = torch.ones(B, N, 1)  # dummy features
 
     labels = torch.stack([batch[b][1] for b in range(B)])
 
-    return [x, A, mask, labels, params_dict]
+    return [x, A.expand(B, -1, -1), mask.expand(B, -1), labels, params_dict]
 
 
 def collate_batch(batch):
@@ -82,18 +94,6 @@ def collate_batch(batch):
     return [x, A, mask, labels, params_dict]
 
 
-def shuffle_nodes(batch):
-    x, A, mask, labels, params_dict = batch
-    for b in range(x.shape[0]):
-        idx = np.random.permutation(x.shape[1])
-        x[b] = x[b, idx]
-        A[b] = A[b, :, idx][idx, :]
-        mask[b] = mask[b, idx]
-        if 'node_attn' in params_dict:
-            params_dict['node_attn'][b] = params_dict['node_attn'][b, idx]
-    return [x, A, mask, labels, params_dict]
-
-
 def stats(arr):
     return np.mean(arr), np.std(arr), np.min(arr), np.max(arr)
 
@@ -104,7 +104,7 @@ class SyntheticGraphs(torch.utils.data.Dataset):
                  dataset,
                  split):
 
-        self.is_test = split.lower() == 'test'
+        self.is_test = split.lower() in ['test', 'val']
 
         if dataset.find('colors') >= 0:
             dim = int(dataset.split('-')[1])
@@ -119,6 +119,7 @@ class SyntheticGraphs(torch.utils.data.Dataset):
 
         with open(pjoin(data_dir, data_file), 'rb') as f:
             data = pickle.load(f)
+
         for key in data:
             if not isinstance(data[key], list) and not isinstance(data[key], np.ndarray):
                 print(split, key, data[key])
@@ -183,6 +184,6 @@ class SyntheticGraphs(torch.utils.data.Dataset):
                 self.labels[index],
                 self.GT_attn[index]]
 
-        data = utils.list_to_torch(data)  # convert to torch
+        data = list_to_torch(data)  # convert to torch
 
         return data

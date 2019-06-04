@@ -44,7 +44,9 @@ def parse_args():
     parser.add_argument('--readout', type=str, default='sum', choices=['mean', 'sum', 'max'], help='type of global pooling over all nodes')
     parser.add_argument('--kl_weight', type=float, default=100, help='weight of the KL term in the loss')
     parser.add_argument('--pool', type=str, default=None, help='type of pooling between layers')
+    parser.add_argument('--img_features', type=str, default='mean,coord', help='which image features to use as node features')
     # Auxiliary arguments
+    parser.add_argument('--validation', action='store_true', default=False, help='run in the (cross)validation mode')
     parser.add_argument('--test_batch_size', type=int, default=32, help='batch size for test data')
     parser.add_argument('--log_interval', type=int, default=400, help='print interval')
     parser.add_argument('--results', type=str, default='./results',
@@ -56,6 +58,7 @@ def parse_args():
 
     args.lr_decay_step = list(map(int, args.lr_decay_step.split(',')))
     args.filters = list(map(int, args.filters.split(',')))
+    args.img_features = args.img_features.split(',')
 
     for arg in vars(args):
         print(arg, getattr(args, arg))
@@ -63,88 +66,7 @@ def parse_args():
     return args
 
 
-def count_correct(output, target, N_nodes=None, N_nodes_min=0, N_nodes_max=25):
-    if output.shape[1] == 1:
-        # Regression
-        pred = output.round().long()
-    else:
-        # Classification
-        pred = output.max(1, keepdim=True)[1]
-    target = target.long().squeeze()
-    pred = pred.squeeze()
-    if N_nodes is not None:
-        idx = (N_nodes >= N_nodes_min) & (N_nodes <= N_nodes_max)
-        if idx.sum() > 0:
-            correct = pred[idx].eq(target[idx]).sum().item()
-            for lbl in torch.unique(target, sorted=True):
-                idx_lbl = target[idx] == lbl
-                eq = (pred[idx][idx_lbl] == target[idx][idx_lbl]).float()
-                print('lbl: {}, avg acc: {:2.2f}% ({}/{})'.format(lbl, 100 * eq.mean(), int(eq.sum()),
-                                                                  int(idx_lbl.float().sum())))
-
-            eq = (pred[idx] == target[idx]).float()
-            print('{} <= N_nodes <= {} (min={}, max={}), avg acc: {:2.2f}% ({}/{})'.format(N_nodes_min,
-                                                                                          N_nodes_max,
-                                                                                          N_nodes[idx].min(),
-                                                                                          N_nodes[idx].max(),
-                                                                                          100 * eq.mean(),
-                                                                                                  int(eq.sum()), int(idx.sum())))
-        else:
-            correct = 0
-            print('no graphs with nodes >= {} and <= {}'.format(N_nodes_min, N_nodes_max))
-    else:
-        correct = pred.eq(target).sum().item()
-
-    return correct
-
-
-def mse_loss(target, output, reduction='mean'):
-    if reduction == 'mean':
-        return torch.mean((target.float().squeeze() - output.float().squeeze()) ** 2)
-    elif reduction == 'sum':
-        return torch.sum((target.float().squeeze() - output.float().squeeze()) ** 2)
-    else:
-        NotImplementedError(reduction)
-
-
-def normalize_data(data):
-    # TODO:
-    return data
-
-
-def sanity_check(model, data):
-    output1, other_losses1 = model(data)
-    output2, other_losses2 = model(shuffle_nodes(data))
-    assert torch.allclose(output1, output2, rtol=1e-03, atol=1e-05), torch.norm(output1 - output2)
-    for l1, l2 in zip(other_losses1, other_losses2):
-        assert torch.allclose(l1, l2), (l1, l2)
-    print('model is checked for nodes shuffling')
-
-
-def compute_avg(model, device, train_loader, n_batches=np.Inf):
-    print('computing mean and std of input features')
-    model.eval()
-    x = []
-    with torch.no_grad():
-        for batch_idx, data in enumerate(train_loader):
-            x.append(data[0].view(data[0].size(0), data[0].size(1), -1).data) # B,N,F
-            if batch_idx > n_batches:
-                break
-            del data
-    x = torch.cat(x, dim=1)  # M,N,F
-    print('data read', x.shape)
-
-    mn = x.mean(dim=0, keepdim=True).mean(dim=1, keepdim=True)
-    sd = x.std(dim=0, keepdim=True).std(dim=1, keepdim=True)
-    print('mn', mn.data.cpu().numpy())
-    print('std', sd.data.cpu().numpy())
-    sd[sd < 2e-2] = 1 - 1e-5
-    print('corrected (non zeros) std', sd.data.cpu().numpy())
-    mn = mn.to(args.device)
-    sd = sd.to(args.device)
-    return mn, sd
-
-def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn):
+def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, feature_stats=None):
     model.train()
     optimizer.zero_grad()
     n_samples, correct, train_loss = 0, 0, 0
@@ -152,7 +74,8 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn):
 
     for batch_idx, data in enumerate(train_loader):
         data = data_to_device(data, device)
-        data = normalize_data(data)
+        if feature_stats is not None:
+            data[0] = (data[0] - feature_stats[0]) / feature_stats[1]
         if batch_idx == 0 and epoch <= 1:
             sanity_check(model.eval(), data)  # to disable the effect of dropout or other regularizers that can change behavior from batch to batch
             model.train()
@@ -187,7 +110,7 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn):
     return train_loss, acc
 
 
-def test(model, test_loader, epoch, device, loss_fn, set_name, dataset):
+def test(model, test_loader, epoch, device, loss_fn, set_name, dataset, feature_stats=None):
     model.eval()
     n_samples, correct, test_loss = 0, 0, 0
     pred, targets, N_nodes = [], [], []
@@ -196,7 +119,8 @@ def test(model, test_loader, epoch, device, loss_fn, set_name, dataset):
     for batch_idx, data in enumerate(test_loader):
         optimizer.zero_grad()
         data = data_to_device(data, device)
-        data = normalize_data(data)
+        if feature_stats is not None:
+            data[0] = (data[0] - feature_stats[0]) / feature_stats[1]
         if batch_idx == 0 and epoch <= 1:
             sanity_check(model, data)
 
@@ -215,11 +139,13 @@ def test(model, test_loader, epoch, device, loss_fn, set_name, dataset):
     N_nodes = torch.cat(N_nodes)
     if dataset.find('colors') >= 0:
         correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=25)
-        correct += count_correct(pred[2500:5000], targets[2500:5000], N_nodes=N_nodes[2500:5000], N_nodes_min=26, N_nodes_max=200)
-        correct += count_correct(pred[5000:], targets[5000:], N_nodes=N_nodes[5000:], N_nodes_min=26, N_nodes_max=200)
+        if not args.validation:
+            correct += count_correct(pred[2500:5000], targets[2500:5000], N_nodes=N_nodes[2500:5000], N_nodes_min=26, N_nodes_max=200)
+            correct += count_correct(pred[5000:], targets[5000:], N_nodes=N_nodes[5000:], N_nodes_min=26, N_nodes_max=200)
     elif dataset == 'triangles':
         correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=25)
-        correct += count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=26, N_nodes_max=100)
+        if not args.validation:
+            correct += count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=26, N_nodes_max=100)
     else:
         correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=1e5)
 
@@ -255,17 +181,38 @@ if __name__ == '__main__':
 
     if args.dataset.find('colors') >= 0 or args.dataset == 'triangles':
         train_dataset = SyntheticGraphs(args.data_dir, args.dataset, 'train')
-        test_dataset = SyntheticGraphs(args.data_dir, args.dataset, 'test')
+        test_dataset = SyntheticGraphs(args.data_dir, args.dataset, 'val' if args.validation else 'test')
         loss_fn = mse_loss
         collate_fn = collate_batch
         in_features = train_dataset.feature_dim
         out_features = 1
     elif args.dataset == 'mnist':
         train_dataset = datasets.MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
-        test_dataset = datasets.MNIST(args.data_dir, train=False, download=True, transform=transforms.ToTensor())
+        if args.validation:
+            n_val = 5000
+            train_dataset.train_data = train_dataset.train_data[:-n_val]
+            train_dataset.train_labels = train_dataset.train_labels[:-n_val]
+            print(train_dataset.train_data.shape, len(train_dataset.train_labels))
+            test_dataset = datasets.MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
+            test_dataset.train_data = train_dataset.train_data[-n_val:]
+            test_dataset.train_labels = train_dataset.train_labels[-n_val:]
+            print(test_dataset.train_data.shape, len(test_dataset.train_labels))
+        else:
+            test_dataset = datasets.MNIST(args.data_dir, train=False, download=True, transform=transforms.ToTensor())
         loss_fn = F.cross_entropy
-        collate_fn = collate_batch_images
-        in_features = 3
+        A, coord, mask = precompute_graph_images(train_dataset.train_data.shape[1])
+        collate_fn = lambda batch: collate_batch_images(batch, A, mask,
+                                                        mean_px_features='mean' in args.img_features,
+                                                        coord=coord if 'coord' in args.img_features else None)
+        in_features = 0
+        for features in args.img_features:
+            if features == 'mean':
+                in_features += 1
+            elif features == 'coord':
+                in_features += 2
+            else:
+                raise NotImplementedError(features)
+        in_features = np.max((in_features, 1))  # in_features=1 if neither mean nor coord are used  (dummy features will be used in this case)
         out_features = 10
     else:
         raise NotImplementedError(args.dataset)
@@ -289,16 +236,24 @@ if __name__ == '__main__':
 
     model.to(args.device)
 
-    optimizer = optim.Adam(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=args.lr,
-        weight_decay=args.wdecay,
-        betas=(0.5, 0.999))
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wdecay, betas=(0.5, 0.999))
     scheduler = lr_scheduler.MultiStepLR(optimizer, args.lr_decay_step, gamma=0.1)
+
+    feature_stats = None
+    if args.dataset == 'mnist':
+        feature_stats = compute_feature_stats(model, train_loader, args.device, n_batches=1000)
 
     for epoch in range(1, args.epochs + 1):
         scheduler.step()
-        train_loss, acc = train(model, train_loader, optimizer, epoch, args.device, args.log_interval, loss_fn)
-        test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'test', args.dataset)
+        train_loss, acc = train(model, train_loader, optimizer, epoch, args.device, args.log_interval, loss_fn, feature_stats)
+        if args.validation:
+            test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'val', args.dataset, feature_stats)
+        elif epoch == 1:
+            # just to make sure that the test function works fine for this test set before training all the way until the last epoch
+            test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'test', args.dataset, feature_stats)
+
+    if not args.validation:
+        # Testing
+        test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'test', args.dataset, feature_stats)
 
     print('done in {}'.format(datetime.datetime.now() - dt))

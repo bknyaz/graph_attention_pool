@@ -165,6 +165,8 @@ class AttentionPooling(nn.Module):
                 node_attn = data[4]['node_attn']
                 # print(data[0].shape, data[2].shape, node_attn.shape)
                 x = x * node_attn.unsqueeze(2)
+                if N > 700:
+                    x = x * data[4]['N_nodes'].view(B, 1, 1).float()
                 if len(node_attn.shape) < len(data[2].shape):
                     node_attn = node_attn.unsqueeze(2)
                 mask = mask & (node_attn > 0)
@@ -175,7 +177,7 @@ class AttentionPooling(nn.Module):
             raise NotImplementedError('todo')
 
         mask = mask.view(B, N)
-        drop = True
+        drop = False
         if drop:
             N_nodes = torch.sum(mask, dim=1).long()  # B
             N_nodes_max = N_nodes.max()

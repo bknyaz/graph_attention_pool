@@ -5,14 +5,15 @@ import pickle
 import argparse
 import networkx as nx
 import datetime
-import copy
 import multiprocessing as mp
+from utils import *
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Generate synthetic graph datasets')
     parser.add_argument('-D', '--dataset', type=str, default='colors', choices=['colors', 'triangles'])
     parser.add_argument('-o', '--out_dir', type=str, default='./data', help='path where to save superpixels')
     parser.add_argument('--N_train', type=int, default=500, help='number of training graphs (500 for colors and 30000 for triangles)')
+    parser.add_argument('--N_val', type=int, default=2500, help='number of graphs in the validation set (2500 for colors and 5000 for triangles)')
     parser.add_argument('--N_test', type=int, default=2500, help='number of graphs in each test subset (2500 for colors and 5000 for triangles)')
     parser.add_argument('--label_min', type=int, default=0,
                         help='smallest label value for a graph (i.e. smallest number of green nodes); 1 for triangles')
@@ -55,40 +56,6 @@ def check_graph_duplicates(Adj_matrices, node_features=None):
         raise ValueError('%d duplicates found in the dataset' % n_duplicates)
 
     print('no duplicated graphs')
-
-
-def copy_data(data, idx):
-    data_new = {}
-    for key in data:
-        if key == 'Max_degree':
-            data_new[key] = data[key]
-            print(key, data_new[key])
-        else:
-            data_new[key] = copy.deepcopy([data[key][i] for i in idx])
-            if key in ['graph_labels', 'N_edges']:
-                data_new[key] = np.array(data_new[key], np.int32)
-            print(key, len(data_new[key]))
-
-    return data_new
-
-
-def concat_data(data):
-    data_new = {}
-    for key in data[0]:
-        if key == 'Max_degree':
-            data_new[key] = np.max(np.array([ d[key] for d in data ]))
-            print(key, data_new[key])
-        else:
-            if key in ['graph_labels', 'N_edges']:
-                data_new[key] = np.concatenate([ d[key] for d in data ])
-            else:
-                lst = []
-                for d in data:
-                    lst.extend(d[key])
-                data_new[key] = lst
-            print(key, len(data_new[key]))
-
-    return data_new
 
 
 # COLORS
@@ -271,7 +238,7 @@ if __name__ == '__main__':
 
         # Generate train and test sets
         data_test_combined, Adj_matrices, node_features = [], [], []
-        for N_graphs, N_nodes_min, N_nodes_max, dim, name in zip([args.N_train + args.N_test, args.N_test, args.N_test],
+        for N_graphs, N_nodes_min, N_nodes_max, dim, name in zip([args.N_train + args.N_val + args.N_test, args.N_test, args.N_test],
                                                            [args.N_min, args.N_max_train + 1, args.N_max_train + 1],
                                                            [args.N_max_train, args.N_max, args.N_max],
                                                            [args.dim, args.dim, args.dim + 1],
@@ -284,7 +251,12 @@ if __name__ == '__main__':
                 print_stats(data_train, name.replace('test', 'train'))
                 node_features += data_train['node_features']
                 Adj_matrices += data_train['Adj_matrices']
-                data_test = copy_data(data, idx[args.N_train: args.N_train + args.N_test])
+                data_val = copy_data(data, idx[args.N_train: args.N_train + args.N_val])
+                print_stats(data_val, name.replace('test', 'val'))
+                node_features += data_val['node_features']
+                Adj_matrices += data_val['Adj_matrices']
+
+                data_test = copy_data(data, idx[args.N_train + args.N_val: args.N_train + args.N_val + args.N_test])
             else:
                 data_test = copy_data(data, rnd.permutation(len(data['graph_labels']))[:args.N_test])
 
@@ -293,46 +265,59 @@ if __name__ == '__main__':
             data_test_combined.append(data_test)
             print_stats(data_test, name)
 
-        # Check for duplicates in the combined train+test sets
+        # Check for duplicates in the combined train+val+test sets
         check_graph_duplicates(Adj_matrices, node_features)
 
         # Saving
         with open('%s/random_graphs_colors_dim%d_train.pkl' % (args.out_dir, args.dim), 'wb') as f:
             pickle.dump(data_train, f, protocol=2)
 
+        with open('%s/random_graphs_colors_dim%d_val.pkl' % (args.out_dir, args.dim), 'wb') as f:
+            pickle.dump(data_val, f, protocol=2)
+
         with open('%s/random_graphs_colors_dim%d_test.pkl' % (args.out_dir, args.dim), 'wb') as f:
             pickle.dump(concat_data(data_test_combined), f, protocol=2)
 
     elif args.dataset.lower() == 'triangles':
 
-        data = generate_graphs_Triangles((args.N_train + args.N_test), args.N_min, args.N_max_train, args, rnd)
+        data = generate_graphs_Triangles((args.N_train + args.N_val + args.N_test), args.N_min, args.N_max_train, args, rnd)
         # Create balanced splits
-        idx_train, idx_test = [], [] #rnd.permutation(len(data['graph_labels']))
+        idx_train, idx_val, idx_test = [], [], []
         classes = np.unique(data['graph_labels'])
         n_classes = len(classes)
         for lbl in classes:
             idx = np.where(data['graph_labels'] == lbl)[0]
             rnd.shuffle(idx)
             n_train = int(args.N_train / n_classes)
+            n_val = int(args.N_val / n_classes)
+            n_test = int(args.N_test / n_classes)
             idx_train.append(idx[:n_train])
-            idx_test.append(idx[n_train: n_train + int(args.N_test / n_classes)])
+            idx_val.append(idx[n_train: n_train + n_val])
+            idx_test.append(idx[n_train + n_val: n_train + n_val + n_test])
         data_train = copy_data(data, np.concatenate(idx_train))
         print_stats(data_train, 'train orig')
+        data_val = copy_data(data, np.concatenate(idx_val))
+        print_stats(data_train, 'val orig')
         data_test = copy_data(data, np.concatenate(idx_test))
         print_stats(data_test, 'test orig')
 
         data = generate_graphs_Triangles(args.N_test, args.N_max_train + 1, args.N_max, args, rnd)
         data_test_large = copy_data(data, rnd.permutation(len(data['graph_labels']))[:args.N_test])
-        print_stats(data_test, 'test large')
+        print_stats(data_test_large, 'test large')
 
-        check_graph_duplicates(data_train['Adj_matrices'] + data_test['Adj_matrices'] + data_test_large['Adj_matrices'])
+        check_graph_duplicates(data_train['Adj_matrices'] + data_val['Adj_matrices'] +
+                               data_test['Adj_matrices'] + data_test_large['Adj_matrices'])
 
         # Saving
         # Max degree is max over all graphs in the training and test sets
-        max_degree = np.max(np.array([d['Max_degree'] for d in (data_train, data_test, data_test_large)]))
+        max_degree = np.max(np.array([d['Max_degree'] for d in (data_train, data_val, data_test, data_test_large)]))
         data_train['Max_degree'] = max_degree
         with open('%s/random_graphs_triangles_train.pkl' % args.out_dir, 'wb') as f:
             pickle.dump(data_train, f, protocol=2)
+
+        data_val['Max_degree'] = max_degree
+        with open('%s/random_graphs_triangles_val.pkl' % args.out_dir, 'wb') as f:
+            pickle.dump(data_val, f, protocol=2)
 
         data_test = concat_data((data_test, data_test_large))
         data_test['Max_degree'] = max_degree

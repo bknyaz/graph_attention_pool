@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from attention_pooling import *
 
+
 class ChebyGINLayer(nn.Module):
     '''
     General Graph Neural Network layer that depending on arguments can be:
@@ -170,10 +171,10 @@ class ChebyGIN(nn.Module):
 
             n_in = in_features if layer == 0 else filters[layer - 1]
             # Pooling layers
-            if len(self.pool) > len(filters) + layer and self.pool[layer + 3] != 'skip':
+            if self.pool is not None and len(self.pool) > len(filters) + layer and self.pool[layer + 3] != 'skip':
                 layers.append(AttentionPooling(in_features=n_in, in_features_prev=n_prev,
                                                pool_type=self.pool[:3] + [self.pool[layer + 3]],
-                                               pool_arch=self.pool_arch, kl_weight=kl_weight))
+                                               pool_arch=self.pool_arch, kl_weight=kl_weight, layer=layer))
 
             # Graph convolution layers
             layers.append(ChebyGINLayer(in_features=n_in,
@@ -192,7 +193,11 @@ class ChebyGIN(nn.Module):
         self.fc = nn.Sequential(*(([nn.Dropout(p=dropout)] if dropout > 0 else []) + [nn.Linear(filters[-1], out_features)]))
 
     def forward(self, data):
+        data[4]['reg'] = []
+        data[4]['alpha'] = []
         data = self.layers(data)
-        x = self.fc(data[0])  # B,out_features
-        reg = data[4]['reg'] if 'reg' in data[4] else []
-        return x, reg
+        y = self.fc(data[0])  # B,out_features
+        params_dict = data[4]
+        reg = params_dict['reg'] if 'reg' in params_dict else []
+        alpha = params_dict['alpha'] if 'alpha' in params_dict else []  # predicted attention coefficients
+        return y, reg, alpha

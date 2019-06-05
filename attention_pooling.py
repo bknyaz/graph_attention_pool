@@ -12,17 +12,19 @@ class AttentionPooling(nn.Module):
                  pool_type,
                  pool_arch,
                  kl_weight=None,
+                 layer=0,
                  drop_nodes=True):
         super(AttentionPooling, self).__init__()
         self.pool_type = pool_type
         self.pool_arch = pool_arch
         self.kl_weight = kl_weight
         self.proj = None
+        self.layer = layer
         self.drop_nodes = drop_nodes
         self.is_topk = self.pool_type[2].lower() == 'topk'
         if self.is_topk:
-            self.ratio = float(self.pool_type[3])  # r
-            assert self.ratio > 0 and self.ratio <= 1, ('invalid top-k ratio', self.ratio, self.pool_type)
+            self.topk_ratio = float(self.pool_type[3])  # r
+            assert self.topk_ratio > 0 and self.topk_ratio <= 1, ('invalid top-k ratio', self.topk_ratio, self.pool_type)
         else:
             self.threshold = float(self.pool_type[3])  # \tilde{alpha}
             assert self.threshold >= 0 and self.threshold <= 1, ('invalid pooling threshold', self.threshold, self.pool_type)
@@ -81,17 +83,16 @@ class AttentionPooling(nn.Module):
         return x.view_as(mask) * mask
 
     def drop_nodes_edges(self, x, A, mask):
-        B, N, C = x.shape
         N_nodes = torch.sum(mask, dim=1).long()  # B
         N_nodes_max = N_nodes.max()
-
-        # Drop nodes
-        mask, idx = torch.topk(mask, N_nodes_max, dim=1, largest=True, sorted=False)
-        x = torch.gather(x, dim=1, index=idx.unsqueeze(2).expand(-1, -1, C))
-
-        # Drop edges
-        A = torch.gather(A, 1, idx.unsqueeze(2).expand(-1, -1, N))
-        A = torch.gather(A, 2, idx.unsqueeze(1).expand(-1, N_nodes_max, -1))
+        if N_nodes_max > 0:
+            B, N, C = x.shape
+            # Drop nodes
+            mask, idx = torch.topk(mask, N_nodes_max, dim=1, largest=True, sorted=False)
+            x = torch.gather(x, dim=1, index=idx.unsqueeze(2).expand(-1, -1, C))
+            # Drop edges
+            A = torch.gather(A, 1, idx.unsqueeze(2).expand(-1, -1, N))
+            A = torch.gather(A, 2, idx.unsqueeze(1).expand(-1, N_nodes_max, -1))
 
         return x, A, mask
 
@@ -100,7 +101,7 @@ class AttentionPooling(nn.Module):
         x, A, mask, _, params_dict = data[:5]
 
         mask_float = mask.float()
-
+        N_nodes_float = params_dict['N_nodes'].float()
         B, N, C = x.shape
         if self.pool_type[1] in ['gt', 'sup']:
             if 'node_attn' in params_dict:
@@ -110,20 +111,28 @@ class AttentionPooling(nn.Module):
 
         if self.pool_type[1] in ['unsup', 'sup']:
             attn_input = data[-1] if self.pool_arch[1] == 'prev' else x.clone()
-
-            alpha_pre = self.mask_out(torch.exp(self.proj(attn_input)), mask_float).view(B, N)
-            alpha = alpha_pre / (torch.sum(alpha_pre, dim=1, keepdim=True) + 1e-7)
+            alpha_pre = self.proj(attn_input)
+            # softmax with masking out dummy nodes
+            alpha = self.mask_out(torch.exp(alpha_pre), mask_float).view(B, N)
+            alpha = alpha / (torch.sum(alpha, dim=1, keepdim=True) + 1e-7)
             if self.pool_type[1] == 'sup':
                 KL_loss_per_node = self.mask_out(F.kl_div(torch.log(alpha + 1e-14), alpha_gt, reduction='none'), mask_float)  # per node loss
-                KL_loss = self.kl_weight * torch.mean(KL_loss_per_node.sum(dim=1) /
-                                                      (params_dict['N_nodes'].float() + 1e-7))  # mean over nodes, then mean over batches
+                KL_loss = self.kl_weight * torch.mean(KL_loss_per_node.sum(dim=1) / (N_nodes_float + 1e-7))  # mean over nodes, then mean over batches
         else:
             alpha = alpha_gt
 
         x = x * alpha.view(B, N, 1)
         if N > 700:
-            x = x * params_dict['N_nodes'].view(B, 1, 1).float()
-        mask = (mask & (alpha.view_as(mask) > self.threshold)).view(B, N)
+            x = x * N_nodes_float.view(B, 1, 1)
+        if self.is_topk:
+            N_remove = torch.round(N_nodes_float * (1 - self.topk_ratio)).long()  # number of nodes to be removed for each graph
+            idx = torch.sort(alpha, dim=1, descending=False)[1]  # indices of alpha in ascending order
+            mask = mask.clone()
+            for b in range(B):
+                idx_b = idx[b, mask[b, idx[b]] > 0]  # take indices of non-dummy nodes for current data example
+                mask[b, idx_b[:N_remove[b]]] = 0
+        else:
+            mask = (mask & (alpha.view_as(mask) > self.threshold)).view(B, N)
 
         if self.drop_nodes:
             x, A, mask = self.drop_nodes_edges(x, A, mask)
@@ -132,9 +141,13 @@ class AttentionPooling(nn.Module):
         A = A * mask_matrix.float()   # or A[~mask_matrix] = 0
 
         # Add additional losses regularizing the model
-        if 'reg' not in params_dict:
-            data[4]['reg'] = []
         if KL_loss is not None:
+            if 'reg' not in params_dict:
+                data[4]['reg'] = []
             data[4]['reg'].append(KL_loss)
 
+        # Keep attention coefficients
+        if 'alpha' not in params_dict:
+            data[4]['alpha'] = []
+        data[4]['alpha'].append(alpha)
         return [x, A, mask, *data[3:]]

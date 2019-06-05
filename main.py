@@ -11,11 +11,12 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
-from torchvision import datasets, transforms
+from torchvision import transforms
 from chebygin import *
 from graphdata import *
 from utils import *
 
+sys.stdout.flush()
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Run experiments with Graph Neural Networks')
@@ -42,8 +43,11 @@ def parse_args():
     parser.add_argument('--pool_arch', type=str, default=None, help='pooling layers architecture')
     parser.add_argument('--img_features', type=str, default='mean,coord', help='which image features to use as node features')
     # Auxiliary arguments
-    parser.add_argument('--validation', action='store_true', default=False, help='run in the (cross)validation mode')
+    parser.add_argument('--validation', action='store_true', default=False, help='run in the validation mode')
+    parser.add_argument('--eval_attn_train', action='store_true', default=False, help='evaluate attention and save coefficients on the training set for models without learnable attention')
+    parser.add_argument('--eval_attn_test', action='store_true', default=False, help='evaluate attention and save coefficients on the test set for models without learnable attention')
     parser.add_argument('--test_batch_size', type=int, default=100, help='batch size for test data')
+    parser.add_argument('--alpha_ws', type=str, default=None, help='attention labels that will be used for (weak)supervision')
     parser.add_argument('--img_noise_levels', type=str, default='0.75,1.25', help='Gaussian noise standard deviations for grayscale and color image features')
     parser.add_argument('--log_interval', type=int, default=400, help='print interval')
     parser.add_argument('--results', type=str, default='./results',
@@ -68,7 +72,9 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
     model.train()
     optimizer.zero_grad()
     n_samples, correct, train_loss = 0, 0, 0
+    alpha_pred, alpha_GT = {}, []
     start = time.time()
+
     # with torch.autograd.set_detect_anomaly(True):
     for batch_idx, data in enumerate(train_loader):
         data = data_to_device(data, device)
@@ -78,7 +84,7 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
             sanity_check(model.eval(), data)  # to disable the effect of dropout or other regularizers that can change behavior from batch to batch
             model.train()
         optimizer.zero_grad()
-        output, other_losses = model(data)
+        output, other_losses, alpha = model(data)
         targets = data[3]
         loss = loss_fn(output, targets)
         for l in other_losses:
@@ -91,14 +97,21 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
         time_iter = time.time() - start
         correct += count_correct(output.detach(), targets.detach())
 
+        alpha_GT.append(data[4]['node_attn'].data.cpu().numpy().flatten())
+        for layer in range(len(alpha)):
+            if layer not in alpha_pred:
+                alpha_pred[layer] = []
+            alpha_pred[layer].append(alpha[layer].data.cpu().numpy().flatten())
+
         acc = 100. * correct / n_samples  # average over all examples in the dataset
         train_loss_avg  = train_loss / (batch_idx + 1)
 
         if (batch_idx > 0 and batch_idx % log_interval == 0) or batch_idx == len(train_loader) - 1:
-            print('Train set (epoch {}): [{}/{} ({:.0f}%)]\tLoss: {:.4f} (avg: {:.4f}), other losses: {}\tAcc metric: {}/{} ({:.2f}%)\t avg sec/iter: {:.4f}'.format(
+            print('Train set (epoch {}): [{}/{} ({:.0f}%)]\tLoss: {:.4f} (avg: {:.4f}), other losses: {}\tAcc metric: {}/{} ({:.2f}%)\t AttnAUC: {}\t avg sec/iter: {:.4f}'.format(
                 epoch, n_samples, len(train_loader.dataset), 100. * n_samples / len(train_loader.dataset),
                 loss_item, train_loss_avg, ['%.4f' % l.item() for l in other_losses],
-                correct, n_samples, acc, time_iter / (batch_idx + 1)))
+                correct, n_samples, acc, ['%.2f' % a for a in attn_AUC(alpha_GT, alpha_pred)],
+                time_iter / (batch_idx + 1)))
 
     print('\n')
     assert n_samples == len(train_loader.dataset), (n_samples, len(train_loader.dataset))
@@ -106,13 +119,15 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
     return train_loss, acc
 
 
-def test(model, test_loader, epoch, device, loss_fn, set_name, dataset, feature_stats=None, noises=None, img_noise_levels=None):
+def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir, seed, feature_stats=None, noises=None, img_noise_level=None, eval_attn=False):
     model.eval()
     n_samples, correct, test_loss = 0, 0, 0
     pred, targets, N_nodes = [], [], []
     start = time.time()
-
-    ind = np.arange(3)
+    alpha_pred, alpha_GT = {}, []
+    if eval_attn:
+        alpha_pred[0] = []
+        print('testing with evaluation of attention: takes longer time')
 
     for batch_idx, data in enumerate(test_loader):
         optimizer.zero_grad()
@@ -123,12 +138,12 @@ def test(model, test_loader, epoch, device, loss_fn, set_name, dataset, feature_
             sanity_check(model, data)
 
         if noises is not None:
-            noise = noises[n_samples:n_samples + len(data[0])].to(device) * img_noise_levels
+            noise = noises[n_samples:n_samples + len(data[0])].to(device) * img_noise_level
             if len(noise.shape) == 2:
                 noise = noise.unsqueeze(2)
-            data[0][:, :, ind] = data[0][:, :, ind] + noise
+            data[0][:, :, :3] = data[0][:, :, :3] + noise
 
-        output, other_losses = model(data)
+        output, other_losses, alpha = model(data)
         loss = loss_fn(output, data[3], reduction='sum')
         for l in other_losses:
             loss += l
@@ -136,8 +151,22 @@ def test(model, test_loader, epoch, device, loss_fn, set_name, dataset, feature_
         pred.append(output.detach())
         targets.append(data[3].detach())
         N_nodes.append(data[4]['N_nodes'])
+        alpha_GT.append(data[4]['node_attn'].data.cpu().numpy())
+        if eval_attn:
+            assert len(alpha) == 0, ('invalid mode, eval_attn should be false')
+            alpha_pred[0].append(attn_heatmaps(model, device, data, output.data.cpu(), test_loader.batch_size).data.cpu().numpy())
+        else:
+            for layer in range(len(alpha)):
+                if layer not in alpha_pred:
+                    alpha_pred[layer] = []
+                alpha_pred[layer].append(alpha[layer].data.cpu().numpy())
 
         n_samples += len(data[0])
+        if eval_attn and n_samples % 1000 == 0:
+            print('{}/{} samples processed'.format(n_samples, len(test_loader.dataset)))
+
+        # if n_samples > 1200:
+        #     break
 
     assert n_samples == len(test_loader.dataset), (n_samples, len(test_loader.dataset))
 
@@ -160,11 +189,33 @@ def test(model, test_loader, epoch, device, loss_fn, set_name, dataset, feature_
 
     test_loss_avg = test_loss / n_samples
     acc = 100. * correct / n_samples  # average over all examples in the dataset
+    print('{} set (epoch {}): Avg loss: {:.4f}, Acc metric: {}/{} ({:.2f}%)\t AttnAUC: {}\t avg sec/iter: {:.4f}\n'.format(
+        split.capitalize(), epoch, test_loss_avg, correct, n_samples, acc,
+        ['%.2f' % a for a in attn_AUC(alpha_GT, alpha_pred)], time_iter / len(test_loader)))
 
-    print('{} set (epoch {}): Avg loss: {:.4f}, Acc metric: {}/{} ({:.2f}%)\t avg sec/iter: {:.4f}\n'.format(
-        set_name.capitalize(), epoch, test_loss_avg, correct, n_samples, acc, time_iter / len(test_loader)))
+    if eval_attn:
+        with open(pjoin(results_dir, 'alpha_WS_%s_seed%d.pkl' % (split, seed)), 'wb') as f:
+            pickle.dump(alpha_pred[0], f, protocol=2)
 
     return test_loss, acc
+
+
+def save_checkpoint(model, scheduler, optimizer, args, epoch):
+    fname = '%s/checkpoint_%s_epoch%d_seed%d.pth.tar' % (args.results, args.dataset, epoch, args.seed)
+    try:
+        print('saving the model to %s' % fname)
+        state = {
+            'epoch': epoch,
+            'args': args,
+            'state_dict': model.state_dict(),
+            'scheduler': scheduler.state_dict(),
+            'optimizer': optimizer.state_dict(),
+        }
+        if os.path.isfile(fname):
+            print('WARNING: file %s exists and will be overwritten' % fname)
+        torch.save(state, fname)
+    except Exception as e:
+        print('error saving the model', e)
 
 
 if __name__ == '__main__':
@@ -195,31 +246,34 @@ if __name__ == '__main__':
     elif args.dataset in ['mnist', 'mnist-75sp']:
         use_mean_px = 'mean' in args.img_features
         use_coord = 'coord' in args.img_features
+        assert use_mean_px, ('this mode is not well supported', use_mean_px)
+        gt_attn_threshold = 0 if (args.pool is not None and args.pool[1] == 'gt' and args.filter_scale > 1) else 0.5
         if args.dataset == 'mnist':
-            train_dataset = datasets.MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
+            train_dataset = MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor(), attn_coef=args.alpha_ws)
         else:
-            train_dataset = MNIST75sp(args.data_dir, split='train', use_mean_px=use_mean_px, use_coord=use_coord)
+            train_dataset = MNIST75sp(args.data_dir, split='train', use_mean_px=use_mean_px, use_coord=use_coord,
+                                      gt_attn_threshold=gt_attn_threshold, attn_coef=args.alpha_ws)
 
         if args.validation:
             n_val = 5000
             if args.dataset == 'mnist':
                 train_dataset.train_data = train_dataset.train_data[:-n_val]
                 train_dataset.train_labels = train_dataset.train_labels[:-n_val]
-                test_dataset = datasets.MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
+                test_dataset = MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
                 test_dataset.train_data = train_dataset.train_data[-n_val:]
                 test_dataset.train_labels = train_dataset.train_labels[-n_val:]
             else:
                 train_dataset.train_val_split(np.arange(0, train_dataset.n_samples - n_val))
-                test_dataset = MNIST75sp(args.data_dir, split='train', use_mean_px=use_mean_px, use_coord=use_coord)
+                test_dataset = MNIST75sp(args.data_dir, split='train', use_mean_px=use_mean_px, use_coord=use_coord, gt_attn_threshold=gt_attn_threshold)
                 test_dataset.train_val_split(np.arange(train_dataset.n_samples - n_val, train_dataset.n_samples))
         else:
             noise_file = pjoin(args.data_dir, '%s_noise.pt' % args.dataset.replace('-', '_'))
             color_noise_file = pjoin(args.data_dir, '%s_color_noise.pt' % args.dataset.replace('-', '_'))
             if args.dataset == 'mnist':
-                test_dataset = datasets.MNIST(args.data_dir, train=False, download=True, transform=transforms.ToTensor())
+                test_dataset = MNIST(args.data_dir, train=False, download=True, transform=transforms.ToTensor())
                 noise_shape = (len(test_dataset.test_labels), 28 * 28)
             else:
-                test_dataset = MNIST75sp(args.data_dir, split='test', use_mean_px=use_mean_px, use_coord=use_coord)
+                test_dataset = MNIST75sp(args.data_dir, split='test', use_mean_px=use_mean_px, use_coord=use_coord, gt_attn_threshold=gt_attn_threshold)
                 noise_shape = (len(test_dataset.labels), 75)
 
             # Generate/load noise (save it to make reproducible)
@@ -229,7 +283,8 @@ if __name__ == '__main__':
         if args.dataset == 'mnist':
             A, coord, mask = precompute_graph_images(train_dataset.train_data.shape[1])
             collate_fn = lambda batch: collate_batch_images(batch, A, mask, use_mean_px=use_mean_px,
-                                                            coord=coord if use_coord else None)
+                                                            coord=coord if use_coord else None,
+                                                            gt_attn_threshold=gt_attn_threshold)
         else:
             train_dataset.precompute_graph_images()
             test_dataset.precompute_graph_images()
@@ -251,6 +306,8 @@ if __name__ == '__main__':
         raise NotImplementedError(args.dataset)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.threads, collate_fn=collate_fn)
+    # A loader to test and evaluate attn on the training set (shouldn't be shuffled and have larger batch size multiple of 50)
+    train_loader_test = DataLoader(train_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
 
     model = ChebyGIN(in_features=in_features,
@@ -278,18 +335,31 @@ if __name__ == '__main__':
     if args.dataset in ['mnist', 'mnist-75sp']:
         feature_stats = compute_feature_stats(model, train_loader, args.device, n_batches=1000)
 
+    # Test function wrapper
+    test_fn = lambda loader, epoch, split, noises, img_noise_level, eval_attn: \
+        test(model, loader, epoch, args.device, loss_fn, split, args.dataset, args.results, args.seed,
+             feature_stats, noises=noises, img_noise_level=img_noise_level, eval_attn=eval_attn and args.eval_attn_test)
+
     for epoch in range(1, args.epochs + 1):
         scheduler.step()
+        eval_epoch = epoch <= 1 or epoch == args.epochs
+        eval_attn = epoch == args.epochs and args.eval_attn_train
         train_loss, acc = train(model, train_loader, optimizer, epoch, args.device, args.log_interval, loss_fn, feature_stats)
+        if eval_epoch:
+            save_checkpoint(model, scheduler, optimizer, args, epoch)
+            # Report Training accuracy and other metrics on the training set
+            train_loss, acc = test_fn(train_loader_test, epoch, 'train', None, None, eval_attn)
+
+        eval_attn = epoch == args.epochs and args.eval_attn_test
         if args.validation:
-            test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'val', args.dataset, feature_stats)
-        elif epoch == 1 or epoch == args.epochs:
+            test_loss, acc = test_fn(test_loader, epoch, 'val', None, None, eval_attn)
+
+        elif eval_epoch:
             # check for epoch == 1 just to make sure that the test function works fine for this test set before training all the way until the last epoch
-            test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'test', args.dataset, feature_stats)
+            test_loss, acc = test_fn(test_loader, epoch, 'test', None, None, eval_attn)
             if args.dataset in ['mnist', 'mnist-75sp']:
-                test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'test', args.dataset,
-                                      feature_stats, noises=noises, img_noise_levels=args.img_noise_levels[0])
-                test_loss, acc = test(model, test_loader, epoch, args.device, loss_fn, 'test', args.dataset,
-                                      feature_stats, noises=color_noises, img_noise_levels=args.img_noise_levels[1])
+                test_loss, acc =  test_fn(test_loader, epoch, 'test', noises, args.img_noise_levels[0], eval_attn)
+                test_loss, acc = test_fn(test_loader, epoch, 'test', color_noises, args.img_noise_levels[1], eval_attn)
+
 
     print('done in {}'.format(datetime.datetime.now() - dt))

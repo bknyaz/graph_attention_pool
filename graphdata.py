@@ -7,6 +7,7 @@ import torch
 import torch.utils
 import torch.utils.data
 import torch.nn.functional as F
+import torchvision
 from scipy.spatial.distance import cdist
 from utils import *
 
@@ -29,7 +30,7 @@ def precompute_graph_images(img_size):
     return A, coord, mask
 
 
-def collate_batch_images(batch, A, mask, use_mean_px=True, coord=None):
+def collate_batch_images(batch, A, mask, use_mean_px=True, coord=None, gt_attn_threshold=0):
     '''
     Creates a batch of graphs representing images
     :param batch: batch in the PyTorch Geometric format or [node_features*batch_size, A*batch_size, label*batch_size]
@@ -40,11 +41,20 @@ def collate_batch_images(batch, A, mask, use_mean_px=True, coord=None):
     C, H, W = batch[0][0].shape
     N_nodes = H * W
     params_dict = {'N_nodes': torch.zeros(B, dtype=torch.long) + N_nodes}
+    has_attn = len(batch[0]) > 2
+    if has_attn:
+        GT_attn = torch.from_numpy(np.stack([batch[b][2].reshape(N_nodes) for b in range(B)]).astype(np.float32)).view(B, N_nodes)
     x = None
     if use_mean_px:
         x = torch.stack([batch[b][0].view(C, N_nodes).t() for b in range(B)]).float()
-        GT_attn = (x > 0).view(B, N_nodes).float()
+        if not has_attn:
+            if gt_attn_threshold == 0:
+                GT_attn = (x > 0).view(B, N_nodes).float()
+            else:
+                GT_attn = x.view(B, N_nodes).float().clone()
+                GT_attn[GT_attn < gt_attn_threshold] = 0
         GT_attn = GT_attn / (GT_attn.sum(dim=1, keepdim=True) + 1e-7)
+
         params_dict.update({'node_attn': GT_attn})
 
     if coord is not None:
@@ -104,12 +114,38 @@ def stats(arr):
     return np.mean(arr), np.std(arr), np.min(arr), np.max(arr)
 
 
+class MNIST(torchvision.datasets.MNIST):
+    '''
+    Wrapper around MNIST to use predefined attention coefficients
+    '''
+    def __init__(self, root, train=True, transform=None, target_transform=None, download=False, attn_coef=None):
+        super(MNIST, self).__init__(root, train, transform, target_transform, download)
+        self.alpha_WS = None
+        if attn_coef is not None and train:
+            print('loading weakly-supervised labels from %s' % attn_coef)
+            with open(attn_coef, 'rb') as f:
+                self.alpha_WS = pickle.load(f)
+            # self.alpha_WS = []
+            # for i in range(len(self.train_labels)):
+            #     gt_attn = np.random.rand(28 * 28) > 0.5
+            #     self.alpha_WS.append(gt_attn / (np.sum(gt_attn) + 1e-7))
+
+    def __getitem__(self, index):
+        img, target = super(MNIST, self).__getitem__(index)
+        if self.alpha_WS is None:
+            return img, target
+        else:
+            return img, target, self.alpha_WS[index]
+
+
 class MNIST75sp(torch.utils.data.Dataset):
     def __init__(self,
                  data_dir,
                  split,
                  use_mean_px=True,
-                 use_coord=True):
+                 use_coord=True,
+                 gt_attn_threshold=0,
+                 attn_coef=None):
 
         self.split = split
         self.is_test = split.lower() in ['test', 'val']
@@ -120,6 +156,13 @@ class MNIST75sp(torch.utils.data.Dataset):
         self.use_coord = use_coord
         self.n_samples = len(self.labels)
         self.img_size = 28
+        self.gt_attn_threshold = gt_attn_threshold
+
+        self.alpha_WS = None
+        if attn_coef is not None and os.path.isfile(attn_coef) and not self.is_test:
+            print('loading weakly-supervised labels from %s' % attn_coef)
+            with open(attn_coef, 'rb') as f:
+                self.alpha_WS = pickle.load(f)
 
     def train_val_split(self, samples_idx):
         self.sp_data = [self.sp_data[i] for i in samples_idx]
@@ -129,7 +172,7 @@ class MNIST75sp(torch.utils.data.Dataset):
     def precompute_graph_images(self):
         print('precompute all data for the %s set...' % self.split.upper())
         self.Adj_matrices, self.node_features, self.GT_attn = [], [], []
-        for sample in self.sp_data: #range(len(self.n_samples)):
+        for index, sample in enumerate(self.sp_data):
             mean_px, coord = sample[:2]
             coord = coord / self.img_size
             A = comput_adjacency_matrix_images(coord)
@@ -146,7 +189,15 @@ class MNIST75sp(torch.utils.data.Dataset):
             if x is None:
                 x = np.ones(N_nodes, 1)  # dummy features
             x = np.pad(x, ((0, 0), (2, 0)), 'edge')
-            gt_attn = (mean_px > 0).astype(np.float32)
+            if self.alpha_WS is None:
+                if self.gt_attn_threshold == 0:
+                    gt_attn = (mean_px > 0).astype(np.float32)
+                else:
+                    gt_attn = mean_px.copy()
+                    gt_attn[gt_attn < self.gt_attn_threshold] = 0
+            else:
+                gt_attn = self.alpha_WS[index]
+
             self.node_features.append(x)
             self.Adj_matrices.append(A)
             self.GT_attn.append(gt_attn / (np.sum(gt_attn) + 1e-7))

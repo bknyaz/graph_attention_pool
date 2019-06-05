@@ -5,6 +5,38 @@ import os
 import torch
 import copy
 import torch.nn.functional as F
+from sklearn.metrics import roc_auc_score
+
+
+def attn_heatmaps(model, device, data, output_org, batch_size=1):
+    labels = torch.argmax(output_org, dim=1)
+    B, N_nodes, C  = data[0].shape  # N_nodes should be the same in the batch
+    mask_org = data[2].float().cpu()
+    alpha_WS = []
+    with torch.no_grad():
+        for b in range(B):
+            x = torch.zeros(N_nodes, N_nodes - 1, C)
+            A = torch.zeros(N_nodes, N_nodes - 1, N_nodes - 1)
+            mask = torch.zeros(N_nodes, N_nodes - 1)
+            for i in range(N_nodes):
+                node_ids = np.delete(np.arange(N_nodes), i)
+                x[i] = data[0][b, node_ids, :]
+                A[i] = data[1][b, node_ids, :][:, node_ids]
+                mask[i] = data[2][b, node_ids]
+            output_lst = []
+            n_chunks = int(np.ceil(N_nodes / float(batch_size)))
+            for i in range(n_chunks):
+                idx = np.arange(i * batch_size, (i + 1) * batch_size) if i < n_chunks - 1 else np.arange(i * batch_size, N_nodes)
+                output = model(data_to_device([x[idx], A[idx], mask[idx], None, {}], device))[0]
+                output_lst.append(output.data.cpu())
+            output = torch.cat(output_lst, dim=0)
+            assert output.shape[0] == N_nodes, output.shape
+
+            alpha = torch.abs(output[:, labels[b]] - output_org[b, labels[b]]).view(1, N_nodes) * mask_org[b].view(1, N_nodes)
+            alpha_WS.append(alpha / (alpha.sum() + 1e-7))
+
+    alpha_WS = torch.cat(alpha_WS, dim=0)
+    return alpha_WS
 
 
 def load_save_noise(f, noise_shape):
@@ -82,6 +114,14 @@ def count_correct(output, target, N_nodes=None, N_nodes_min=0, N_nodes_max=25):
     return correct
 
 
+def attn_AUC(alpa_GT, alpha):
+    auc = []
+    alpa_GT = np.concatenate(alpa_GT).flatten() > 0
+    for layer in alpha:
+        auc.append(100 * roc_auc_score(y_true=alpa_GT, y_score=np.concatenate(alpha[layer]).flatten()))
+    return auc
+
+
 def mse_loss(target, output, reduction='mean'):
     if reduction == 'mean':
         return torch.mean((target.float().squeeze() - output.float().squeeze()) ** 2)
@@ -105,9 +145,9 @@ def shuffle_nodes(batch):
 
 def sanity_check(model, data):
     with torch.no_grad():
-        output1, other_losses1 = model(data)
-        output2, other_losses2 = model(shuffle_nodes(data))
-        assert torch.allclose(output1, output2, rtol=1e-03, atol=1e-05), torch.norm(output1 - output2)
+        output1, other_losses1, _ = model(data)
+        output2, other_losses2, _ = model(shuffle_nodes(data))
+        assert torch.allclose(output1, output2, rtol=1e-02, atol=1e-03), torch.norm(output1 - output2)
         for l1, l2 in zip(other_losses1, other_losses2):
             assert torch.allclose(l1, l2), (l1, l2)
     print('model is checked for nodes shuffling')

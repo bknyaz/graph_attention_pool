@@ -15,6 +15,7 @@ So far, we release the code to generate datasets. The rest of the code is *comin
 To generate all data using a single command, run ```./prepare_data.sh```.
 
 All generated/downloaded ata will be stored in the local ```./data``` directory.
+It can take 1-2 hours to prepare all data.
 
 ## COLORS
 To generate training, validation and test data for our **Colors** dataset with different dimensionalities

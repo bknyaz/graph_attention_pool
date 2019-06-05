@@ -4,7 +4,7 @@ import torch.sparse
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
-
+from attention_pooling import *
 
 class ChebyGINLayer(nn.Module):
     '''
@@ -88,7 +88,6 @@ class ChebyGINLayer(nn.Module):
         D = torch.sum(A, 1)  # nodes degree (B,N)
         D_hat = (D + 1e-7) ** (-0.5)
         L = D_hat.view(B, N, 1) * A * D_hat.view(B, 1, N)  # B,N,N
-
         if not add_identity:
             L = -L  # for ChebyNet to make a valid Chebyshev basis
         return D, L
@@ -96,9 +95,7 @@ class ChebyGINLayer(nn.Module):
     def forward(self, data):
         x, A, mask = data[:3]
         B, N, F = x.shape
-        x_input = x.clone()
         assert N == A.shape[1] == A.shape[2], ('invalid shape', N, x.shape, A.shape)
-        # data[4]['x_prev'] = x
 
         D, L = self.laplacian_batch(A, add_identity=self.K == 1)  # for the first layer this can be done at the preprocessing stage
         y = self.chebyshev_basis(L, x, self.K)  # B,N,K,F
@@ -121,7 +118,7 @@ class ChebyGINLayer(nn.Module):
 
         y = y * mask.float()
 
-        return [y, A, mask, *data[3:], x_input]
+        return [y, A, mask, *data[3:], x]
 
 
 class GraphReadout(nn.Module):
@@ -147,125 +144,6 @@ class GraphReadout(nn.Module):
         x, A, mask = data[:3]
         x = self.readout_layer(x, mask)
         return [x, *data[1:]]
-
-
-class AttentionPooling(nn.Module):
-    def __init__(self,
-                 in_features,  # feature dimensionality in the current graph layer
-                 in_features_prev,  # feature dimensionality in the previous graph layer
-                 pool_type,
-                 pool_arch,
-                 kl_weight=None):
-        super(AttentionPooling, self).__init__()
-        self.pool_type = pool_type
-        self.pool_arch = pool_arch
-        self.kl_weight = kl_weight
-        print(pool_type, pool_arch)
-        if self.pool_type[1] in ['unsup', 'sup']:
-            assert self.pool_arch not in [None, 'None'], self.pool_arch
-
-            if self.pool_arch[0] == 'fc':
-                n_in = in_features_prev if self.pool_arch[1] == 'prev' else in_features
-                p_optimal = torch.from_numpy(np.pad(np.array([0, 1]), (0, n_in - 2), 'constant')).float().view(1, n_in)
-                if len(self.pool_arch) == 2:
-                    # single layer projection
-                    self.proj = nn.Linear(n_in, 1, bias=False)
-                    p = self.proj.weight.data.view(1, n_in)
-                else:
-                    # multi-layer projection
-                    filters = list(map(int, self.pool_arch[2:]))
-                    self.proj = []
-                    for layer in range(len(filters)):
-                        self.proj.append(nn.Linear(in_features=n_in if layer == 0 else filters[layer - 1],
-                                                   out_features=filters[layer]))
-                        if layer == 0:
-                            p = self.proj[0].weight.data
-                        self.proj.append(nn.ReLU(True))
-
-                    self.proj.append(nn.Linear(filters[-1], 1))
-                    self.proj = nn.Sequential(*self.proj)
-
-                # Compute cosine similarity with the optimal vector and print values
-                # ignore the last dimension, because it does not receive gradients during training
-                # n_in=4 for colors-3 because some of our test subsets have 4 dimensional features
-                cos_sim = self.cosine_sim(p[:, :-1], p_optimal[:, :-1])
-                if p.shape[0] == 1:
-                    print('p values', ['%.7f' % p_i.item() for p_i in p[0]])
-                    print('cos_sim', cos_sim.item())
-                else:
-                    for fn in [torch.max, torch.min, torch.mean, torch.std]:
-                        print('cos_sim', fn(cos_sim).item())
-
-        elif self.pool_type[1] == 'gt':
-            pass # ignore other parameters
-        else:
-            raise NotImplementedError(self.pool_type[1])
-
-    def __repr__(self):
-        return 'AttentionPooling({})'.format(self.pool_type)
-
-    def cosine_sim(self, a, b):
-        return torch.mm(a, b.t()) / (torch.norm(a, dim=1, keepdim=True) * torch.norm(b, dim=1, keepdim=True))
-
-    def forward(self, data):
-        KL_loss = None
-        x_, A, mask_, _, params_dict = data[:5]
-
-        mask = mask_.clone()
-        x = x_.clone()
-
-        B, N, C = x.shape
-        if self.pool_type[1] in ['gt', 'sup']:
-            if 'node_attn' in params_dict:
-                alpha_gt = params_dict['node_attn']
-            else:
-                raise ValueError('ground truth node attention values node_attn required for %s' % self.pool_type)
-
-        if self.pool_type[1] in ['unsup', 'sup']:
-            attn_input = data[-1] if self.pool_arch[1] == 'prev' else x.clone()
-
-            alpha_pre = (torch.exp(self.proj(attn_input)).view_as(mask) * mask_.float()).view(B, N)
-            # alpha_pre = torch.sum(attn_input, dim=2) ** 2  #mask.float().view(B, N)
-
-            alpha = alpha_pre / (torch.sum(alpha_pre, dim=1, keepdim=True) + 1e-7)
-            if self.pool_type[1] == 'sup':
-                # print(alpha.shape, alpha_gt.shape, alpha.min(), alpha.max(), alpha_gt.min(), alpha_gt.max())
-                KL_loss = torch.mean((F.kl_div(torch.log(alpha + 1e-14), alpha_gt.view(B, N), reduction='none').view_as(
-                    mask) * mask.float()).sum(dim=1))
-                # KL_loss = self.kl_weight * torch.mean(KL_loss.sum(dim=1) / (params_dict['N_nodes'].float() + 1e-7))
-        else:
-            alpha = alpha_gt
-
-        mask = mask & (alpha.view_as(mask) > 0)
-
-        x = x * alpha.view(B, N, 1)
-        if N > 700:
-            x = x * params_dict['N_nodes'].view(B, 1, 1).float()
-
-        mask = mask.view(B, N)
-        drop = False
-        if drop:
-            N_nodes = torch.sum(mask, dim=1).long()  # B
-            N_nodes_max = N_nodes.max()
-
-            # Drop nodes
-            mask, idx = torch.topk(mask, N_nodes_max, dim=1, largest=True, sorted=False)
-            x = torch.gather(x, dim=1, index=idx.unsqueeze(2).expand(-1, -1, C))
-
-            # Drop edges
-            A = torch.gather(A, 1, idx.unsqueeze(2).expand(-1, -1, N))
-            A = torch.gather(A, 2, idx.unsqueeze(1).expand(-1, N_nodes_max, -1))
-
-        mask_matrix = mask.unsqueeze(2) & mask.unsqueeze(1)
-        A = A * mask_matrix.float()   # or A[~mask_matrix] = 0
-
-        # Add additional losses regularizing the model
-        if 'reg' not in params_dict:
-            data[4]['reg'] = []
-        if KL_loss is not None:
-            data[4]['reg'].append(KL_loss)
-
-        return [x, A, mask, *data[3:]]
 
 
 class ChebyGIN(nn.Module):
@@ -303,7 +181,7 @@ class ChebyGIN(nn.Module):
                                                     K=K,
                                                     n_hidden=n_hidden,
                                                     aggregation=aggregation,
-                                                    activation=nn.ReLU(inplace=False)))
+                                                    activation=nn.ReLU(inplace=True)))
             n_prev = n_in
 
         # Global pooling over nodes

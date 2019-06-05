@@ -104,11 +104,12 @@ def shuffle_nodes(batch):
 
 
 def sanity_check(model, data):
-    output1, other_losses1 = model(data)
-    output2, other_losses2 = model(shuffle_nodes(data))
-    assert torch.allclose(output1, output2, rtol=1e-03, atol=1e-05), torch.norm(output1 - output2)
-    for l1, l2 in zip(other_losses1, other_losses2):
-        assert torch.allclose(l1, l2), (l1, l2)
+    with torch.no_grad():
+        output1, other_losses1 = model(data)
+        output2, other_losses2 = model(shuffle_nodes(data))
+        assert torch.allclose(output1, output2, rtol=1e-03, atol=1e-05), torch.norm(output1 - output2)
+        for l1, l2 in zip(other_losses1, other_losses2):
+            assert torch.allclose(l1, l2), (l1, l2)
     print('model is checked for nodes shuffling')
 
 

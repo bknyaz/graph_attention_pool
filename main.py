@@ -69,7 +69,7 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
     optimizer.zero_grad()
     n_samples, correct, train_loss = 0, 0, 0
     start = time.time()
-
+    # with torch.autograd.set_detect_anomaly(True):
     for batch_idx, data in enumerate(train_loader):
         data = data_to_device(data, device)
         if feature_stats is not None:
@@ -77,7 +77,6 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
         if batch_idx == 0 and epoch <= 1:
             sanity_check(model.eval(), data)  # to disable the effect of dropout or other regularizers that can change behavior from batch to batch
             model.train()
-
         optimizer.zero_grad()
         output, other_losses = model(data)
         targets = data[3]
@@ -89,7 +88,6 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
         n_samples += len(targets)
         loss.backward()  # accumulates gradient
         optimizer.step()  # update weights
-
         time_iter = time.time() - start
         correct += count_correct(output.detach(), targets.detach())
 

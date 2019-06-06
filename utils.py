@@ -118,9 +118,10 @@ def count_correct(output, target, N_nodes=None, N_nodes_min=0, N_nodes_max=25):
 
 def attn_AUC(alpa_GT, alpha):
     auc = []
-    alpa_GT = np.concatenate(alpa_GT).flatten() > 0
-    for layer in alpha:
-        auc.append(100 * roc_auc_score(y_true=alpa_GT, y_score=np.concatenate(alpha[layer]).flatten()))
+    if len(alpha) > 0:
+        alpa_GT = np.concatenate([a.flatten() for a in alpa_GT]) > 0
+        for layer in alpha:
+            auc.append(100 * roc_auc_score(y_true=alpa_GT, y_score=np.concatenate([a.flatten() for a in alpha[layer]])))
     return auc
 
 
@@ -164,11 +165,11 @@ def compute_feature_stats(model, train_loader, device, n_batches=100):
             x.append(data[0].data) # B,N,F
             if batch_idx > n_batches:
                 break
-    x = torch.cat(x, dim=1)  # M,N,F
+    x = torch.cat(x, dim=1).view(-1, x[0].shape[-1])  # M,N,C
     print('features shape loaded', x.shape)
 
-    mn = x.mean(dim=0, keepdim=True).mean(dim=1, keepdim=True)
-    sd = x.std(dim=0, keepdim=True).std(dim=1, keepdim=True)
+    mn = x.mean(dim=0, keepdim=True)
+    sd = x.std(dim=0, keepdim=True)
     print('mn', mn.data.cpu().numpy())
     print('std', sd.data.cpu().numpy())
     sd[sd < 1e-2] = 1  # to prevent dividing by a small number

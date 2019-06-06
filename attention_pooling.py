@@ -38,6 +38,7 @@ class AttentionPooling(nn.Module):
                 if len(self.pool_arch) == 2:
                     # single layer projection
                     self.proj = nn.Linear(n_in, 1, bias=False)
+                    self.proj.weight.data = torch.randn(n_in).view_as(self.proj.weight.data)  #torch.from_numpy(np.array([-2.5, 2, -2, 0]).astype(np.float32)).view(1, n_in)
                     p = self.proj.weight.data.view(1, n_in)
                 else:
                     # multi-layer projection
@@ -58,7 +59,7 @@ class AttentionPooling(nn.Module):
                 # n_in=4 for colors-3 because some of our test subsets have 4 dimensional features
                 cos_sim = self.cosine_sim(p[:, :-1], p_optimal[:, :-1])
                 if p.shape[0] == 1:
-                    print('p values', ['%.7f' % p_i.item() for p_i in p[0]])
+                    print('p values', p[0].data.cpu().numpy())
                     print('cos_sim', cos_sim.item())
                 else:
                     for fn in [torch.max, torch.min, torch.mean, torch.std]:
@@ -94,7 +95,7 @@ class AttentionPooling(nn.Module):
             A = torch.gather(A, 1, idx.unsqueeze(2).expand(-1, -1, N))
             A = torch.gather(A, 2, idx.unsqueeze(1).expand(-1, N_nodes_max, -1))
 
-        return x, A, mask
+        return x, A, mask, N_nodes
 
     def forward(self, data):
         KL_loss = None
@@ -135,10 +136,16 @@ class AttentionPooling(nn.Module):
             mask = (mask & (alpha.view_as(mask) > self.threshold)).view(B, N)
 
         if self.drop_nodes:
-            x, A, mask = self.drop_nodes_edges(x, A, mask)
+            x, A, mask, N_nodes_pooled = self.drop_nodes_edges(x, A, mask)
 
+        # assert torch.allclose(N_nodes_pooled.float(), torch.sum(mask, 1).float())
         mask_matrix = mask.unsqueeze(2) & mask.unsqueeze(1)
         A = A * mask_matrix.float()   # or A[~mask_matrix] = 0
+
+        # idx_correct = (alpha_gt.view(B, N) > 0) & mask.view(B, N)
+        # idx_others = (alpha_gt.view(B, N) == 0) & mask.view(B, N)
+        # alpha[idx_correct]
+        # p_avg = N_nodes_pooled.float() / N_nodes_float
 
         # Add additional losses regularizing the model
         if KL_loss is not None:
@@ -150,4 +157,13 @@ class AttentionPooling(nn.Module):
         if 'alpha' not in params_dict:
             data[4]['alpha'] = []
         data[4]['alpha'].append(alpha)
+
+        # if self.debug:
+#         if 'alpha' not in params_dict:
+        #     data[4]['alpha'] = []
+        # data[4]['alpha'].append(alpha)
+
+        # if not self.training:
+        #     print(self.proj.weight.data)
+
         return [x, A, mask, *data[3:]]

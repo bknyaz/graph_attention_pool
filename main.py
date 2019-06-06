@@ -44,6 +44,7 @@ def parse_args():
     parser.add_argument('--img_features', type=str, default='mean,coord', help='which image features to use as node features')
     # Auxiliary arguments
     parser.add_argument('--validation', action='store_true', default=False, help='run in the validation mode')
+    parser.add_argument('--debug', action='store_true', default=False, help='evaluate on the test set after each epoch (only for visualization purposes)')
     parser.add_argument('--eval_attn_train', action='store_true', default=False, help='evaluate attention and save coefficients on the training set for models without learnable attention')
     parser.add_argument('--eval_attn_test', action='store_true', default=False, help='evaluate attention and save coefficients on the test set for models without learnable attention')
     parser.add_argument('--test_batch_size', type=int, default=100, help='batch size for test data')
@@ -97,7 +98,7 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
         time_iter = time.time() - start
         correct += count_correct(output.detach(), targets.detach())
 
-        alpha_GT.append(data[4]['node_attn'].data.cpu().numpy().flatten())
+        alpha_GT.append(data[4]['node_attn'].data.cpu().numpy())
         for layer in range(len(alpha)):
             if layer not in alpha_pred:
                 alpha_pred[layer] = []
@@ -176,12 +177,12 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
     N_nodes = torch.cat(N_nodes)
     if dataset.find('colors') >= 0:
         correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=25)
-        if not args.validation:
+        if pred.shape[0] > 2500:
             correct += count_correct(pred[2500:5000], targets[2500:5000], N_nodes=N_nodes[2500:5000], N_nodes_min=26, N_nodes_max=200)
             correct += count_correct(pred[5000:], targets[5000:], N_nodes=N_nodes[5000:], N_nodes_min=26, N_nodes_max=200)
     elif dataset == 'triangles':
         correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=25)
-        if not args.validation:
+        if data[0].shape[1] > 25:
             correct += count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=26, N_nodes_max=100)
     else:
         correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=1e5)
@@ -195,13 +196,19 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
         ['%.2f' % a for a in attn_AUC(alpha_GT, alpha_pred)], time_iter / (batch_idx + 1)))
 
     if eval_attn:
-        with open(pjoin(results_dir, 'alpha_WS_%s_seed%d_%s.pkl' % (split, seed, alpha_WS_name)), 'wb') as f:
-            pickle.dump(alpha_pred[0], f, protocol=2)
+        if results_dir in [None, 'None']:
+            print('skip saving alpha values, invalid results dir: %s' % results_dir)
+        else:
+            with open(pjoin(results_dir, 'alpha_WS_%s_seed%d_%s.pkl' % (split, seed, alpha_WS_name)), 'wb') as f:
+                pickle.dump(alpha_pred[0], f, protocol=2)
 
     return test_loss, acc
 
 
 def save_checkpoint(model, scheduler, optimizer, args, epoch):
+    if args.results in [None, 'None']:
+        print('skip saving checkpoint, invalid results dir: %s' % args.results)
+        return
     fname = '%s/checkpoint_%s_epoch%d_seed%d.pth.tar' % (args.results, args.dataset, epoch, args.seed)
     try:
         print('saving the model to %s' % fname)
@@ -227,7 +234,7 @@ if __name__ == '__main__':
 
     args = parse_args()
 
-    if not os.path.isdir(args.results):
+    if args.results not in [None, 'None'] and not os.path.isdir(args.results):
         os.mkdir(args.results)
 
     rnd = np.random.RandomState(args.seed)
@@ -321,7 +328,8 @@ if __name__ == '__main__':
                      readout=args.readout,
                      pool=args.pool,
                      pool_arch=args.pool_arch,
-                     kl_weight=args.kl_weight)
+                     kl_weight=args.kl_weight,
+                     debug=args.debug)
     print(model)
     # Compute the total number of trainable parameters
     print('model capacity: %d' %
@@ -358,7 +366,7 @@ if __name__ == '__main__':
         if args.validation:
             test_loss, acc = test_fn(test_loader, epoch, 'val', None, None, eval_attn, 'orig')
 
-        elif eval_epoch:
+        elif eval_epoch or args.debug:
             # check for epoch == 1 just to make sure that the test function works fine for this test set before training all the way until the last epoch
             test_loss, acc = test_fn(test_loader, epoch, 'test', None, None, eval_attn, 'orig')
             if args.dataset in ['mnist', 'mnist-75sp']:

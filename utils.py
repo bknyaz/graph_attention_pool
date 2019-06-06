@@ -8,31 +8,33 @@ import torch.nn.functional as F
 from sklearn.metrics import roc_auc_score
 
 
-def attn_heatmaps(model, device, data, output_org, batch_size=1):
+def attn_heatmaps(model, device, data, output_org, batch_size=1, constant_mask=False):
     labels = torch.argmax(output_org, dim=1)
     B, N_nodes, C  = data[0].shape  # N_nodes should be the same in the batch
-    mask_org = data[2].float().cpu()
+    mask_org = data[2].float()  # B,N_nodes
     alpha_WS = []
+    if constant_mask:
+        mask = torch.ones(N_nodes, N_nodes - 1).to(device)
+
+    # Indices of nodes such that in each row one index (i.e. one node) is removed
+    node_ids = torch.arange(start=0, end=N_nodes, device=device).view(1, -1).repeat(N_nodes, 1)
+    node_ids[np.diag_indices(N_nodes, 2)] = -1
+    node_ids = node_ids[node_ids >= 0].view(N_nodes, N_nodes - 1)
+
     with torch.no_grad():
         for b in range(B):
-            x = torch.zeros(N_nodes, N_nodes - 1, C)
-            A = torch.zeros(N_nodes, N_nodes - 1, N_nodes - 1)
-            mask = torch.zeros(N_nodes, N_nodes - 1)
-            for i in range(N_nodes):
-                node_ids = np.delete(np.arange(N_nodes), i)
-                x[i] = data[0][b, node_ids, :]
-                A[i] = data[1][b, node_ids, :][:, node_ids]
-                mask[i] = data[2][b, node_ids]
-            output_lst = []
+            x = torch.gather(data[0][b].unsqueeze(0).expand(N_nodes, -1, -1), dim=1, index=node_ids.unsqueeze(2).expand(-1, -1, C))
+            if not constant_mask:
+                mask = torch.gather(data[2][b].unsqueeze(0).expand(N_nodes, -1), dim=1, index=node_ids)
+            A = torch.gather(data[1][b].unsqueeze(0).expand(N_nodes, -1, -1), dim=1, index=node_ids.unsqueeze(2).expand(-1, -1, N_nodes))
+            A = torch.gather(A, dim=2, index=node_ids.unsqueeze(1).expand(-1, N_nodes - 1, -1))
+            output = torch.zeros(N_nodes).to(device)
             n_chunks = int(np.ceil(N_nodes / float(batch_size)))
             for i in range(n_chunks):
                 idx = np.arange(i * batch_size, (i + 1) * batch_size) if i < n_chunks - 1 else np.arange(i * batch_size, N_nodes)
-                output = model(data_to_device([x[idx], A[idx], mask[idx], None, {}], device))[0]
-                output_lst.append(output.data.cpu())
-            output = torch.cat(output_lst, dim=0)
-            assert output.shape[0] == N_nodes, output.shape
+                output[idx] = model([x[idx], A[idx], mask[idx], None, {}])[0][:, labels[b]].data
 
-            alpha = torch.abs(output[:, labels[b]] - output_org[b, labels[b]]).view(1, N_nodes) * mask_org[b].view(1, N_nodes)
+            alpha = torch.abs(output - output_org[b, labels[b]]).view(1, N_nodes) * mask_org[b].view(1, N_nodes)
             alpha_WS.append(alpha / (alpha.sum() + 1e-7))
 
     alpha_WS = torch.cat(alpha_WS, dim=0)

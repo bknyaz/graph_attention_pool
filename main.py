@@ -119,7 +119,7 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
     return train_loss, acc
 
 
-def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir, seed, feature_stats=None, noises=None, img_noise_level=None, eval_attn=False):
+def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir, seed, feature_stats=None, noises=None, img_noise_level=None, eval_attn=False, alpha_WS_name=''):
     model.eval()
     n_samples, correct, test_loss = 0, 0, 0
     pred, targets, N_nodes = [], [], []
@@ -129,44 +129,45 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
         alpha_pred[0] = []
         print('testing with evaluation of attention: takes longer time')
 
-    for batch_idx, data in enumerate(test_loader):
-        optimizer.zero_grad()
-        data = data_to_device(data, device)
-        if feature_stats is not None:
-            data[0] = (data[0] - feature_stats[0]) / feature_stats[1]
-        if batch_idx == 0 and epoch <= 1:
-            sanity_check(model, data)
+    with torch.no_grad():
+        for batch_idx, data in enumerate(test_loader):
+            optimizer.zero_grad()
+            data = data_to_device(data, device)
+            if feature_stats is not None:
+                data[0] = (data[0] - feature_stats[0]) / feature_stats[1]
+            if batch_idx == 0 and epoch <= 1:
+                sanity_check(model, data)
 
-        if noises is not None:
-            noise = noises[n_samples:n_samples + len(data[0])].to(device) * img_noise_level
-            if len(noise.shape) == 2:
-                noise = noise.unsqueeze(2)
-            data[0][:, :, :3] = data[0][:, :, :3] + noise
+            if noises is not None:
+                noise = noises[n_samples:n_samples + len(data[0])].to(device) * img_noise_level
+                if len(noise.shape) == 2:
+                    noise = noise.unsqueeze(2)
+                data[0][:, :, :3] = data[0][:, :, :3] + noise
 
-        output, other_losses, alpha = model(data)
-        loss = loss_fn(output, data[3], reduction='sum')
-        for l in other_losses:
-            loss += l
-        test_loss += loss.item()
-        pred.append(output.detach())
-        targets.append(data[3].detach())
-        N_nodes.append(data[4]['N_nodes'])
-        alpha_GT.append(data[4]['node_attn'].data.cpu().numpy())
-        if eval_attn:
-            assert len(alpha) == 0, ('invalid mode, eval_attn should be false')
-            alpha_pred[0].append(attn_heatmaps(model, device, data, output.data.cpu(), test_loader.batch_size).data.cpu().numpy())
-        else:
-            for layer in range(len(alpha)):
-                if layer not in alpha_pred:
-                    alpha_pred[layer] = []
-                alpha_pred[layer].append(alpha[layer].data.cpu().numpy())
+            output, other_losses, alpha = model(data)
+            loss = loss_fn(output, data[3], reduction='sum')
+            for l in other_losses:
+                loss += l
+            test_loss += loss.item()
+            pred.append(output.detach())
+            targets.append(data[3].detach())
+            N_nodes.append(data[4]['N_nodes'])
+            alpha_GT.append(data[4]['node_attn'].data.cpu().numpy())
+            if eval_attn:
+                assert len(alpha) == 0, ('invalid mode, eval_attn should be false')
+                alpha_pred[0].append(attn_heatmaps(model, device, data, output.data, test_loader.batch_size, constant_mask=args.dataset=='mnist').data.cpu().numpy())
+            else:
+                for layer in range(len(alpha)):
+                    if layer not in alpha_pred:
+                        alpha_pred[layer] = []
+                    alpha_pred[layer].append(alpha[layer].data.cpu().numpy())
 
-        n_samples += len(data[0])
-        if eval_attn and n_samples % 1000 == 0:
-            print('{}/{} samples processed'.format(n_samples, len(test_loader.dataset)))
+            n_samples += len(data[0])
+            if eval_attn: # and n_samples % 10 == 0:
+                print('{}/{} samples processed'.format(n_samples, len(test_loader.dataset)))
 
-        # if n_samples > 1200:
-        #     break
+            # if eval_attn and n_samples > 10:
+            #     break
 
     assert n_samples == len(test_loader.dataset), (n_samples, len(test_loader.dataset))
 
@@ -191,10 +192,10 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
     acc = 100. * correct / n_samples  # average over all examples in the dataset
     print('{} set (epoch {}): Avg loss: {:.4f}, Acc metric: {}/{} ({:.2f}%)\t AttnAUC: {}\t avg sec/iter: {:.4f}\n'.format(
         split.capitalize(), epoch, test_loss_avg, correct, n_samples, acc,
-        ['%.2f' % a for a in attn_AUC(alpha_GT, alpha_pred)], time_iter / len(test_loader)))
+        ['%.2f' % a for a in attn_AUC(alpha_GT, alpha_pred)], time_iter / (batch_idx + 1)))
 
     if eval_attn:
-        with open(pjoin(results_dir, 'alpha_WS_%s_seed%d.pkl' % (split, seed)), 'wb') as f:
+        with open(pjoin(results_dir, 'alpha_WS_%s_seed%d_%s.pkl' % (split, seed, alpha_WS_name)), 'wb') as f:
             pickle.dump(alpha_pred[0], f, protocol=2)
 
     return test_loss, acc
@@ -336,30 +337,32 @@ if __name__ == '__main__':
         feature_stats = compute_feature_stats(model, train_loader, args.device, n_batches=1000)
 
     # Test function wrapper
-    test_fn = lambda loader, epoch, split, noises, img_noise_level, eval_attn: \
+    test_fn = lambda loader, epoch, split, noises, img_noise_level, eval_attn, alpha_WS_name: \
         test(model, loader, epoch, args.device, loss_fn, split, args.dataset, args.results, args.seed,
-             feature_stats, noises=noises, img_noise_level=img_noise_level, eval_attn=eval_attn and args.eval_attn_test)
+             feature_stats, noises=noises, img_noise_level=img_noise_level, eval_attn=eval_attn, alpha_WS_name=alpha_WS_name)
 
     for epoch in range(1, args.epochs + 1):
         scheduler.step()
         eval_epoch = epoch <= 1 or epoch == args.epochs
-        eval_attn = epoch == args.epochs and args.eval_attn_train
+        eval_attn = (epoch == args.epochs) and args.eval_attn_train
+
+        # train_loss, acc = test_fn(train_loader_test, epoch, 'train', None, None, True, 'orig')
+
         train_loss, acc = train(model, train_loader, optimizer, epoch, args.device, args.log_interval, loss_fn, feature_stats)
         if eval_epoch:
             save_checkpoint(model, scheduler, optimizer, args, epoch)
             # Report Training accuracy and other metrics on the training set
-            train_loss, acc = test_fn(train_loader_test, epoch, 'train', None, None, eval_attn)
+            train_loss, acc = test_fn(train_loader_test, epoch, 'train', None, None, eval_attn, 'orig')
 
-        eval_attn = epoch == args.epochs and args.eval_attn_test
+        eval_attn = (epoch == args.epochs) and args.eval_attn_test
         if args.validation:
-            test_loss, acc = test_fn(test_loader, epoch, 'val', None, None, eval_attn)
+            test_loss, acc = test_fn(test_loader, epoch, 'val', None, None, eval_attn, 'orig')
 
         elif eval_epoch:
             # check for epoch == 1 just to make sure that the test function works fine for this test set before training all the way until the last epoch
-            test_loss, acc = test_fn(test_loader, epoch, 'test', None, None, eval_attn)
+            test_loss, acc = test_fn(test_loader, epoch, 'test', None, None, eval_attn, 'orig')
             if args.dataset in ['mnist', 'mnist-75sp']:
-                test_loss, acc =  test_fn(test_loader, epoch, 'test', noises, args.img_noise_levels[0], eval_attn)
-                test_loss, acc = test_fn(test_loader, epoch, 'test', color_noises, args.img_noise_levels[1], eval_attn)
-
+                test_loss, acc =  test_fn(test_loader, epoch, 'test', noises, args.img_noise_levels[0], eval_attn, 'noisy')
+                test_loss, acc = test_fn(test_loader, epoch, 'test', color_noises, args.img_noise_levels[1], eval_attn, 'noisy-c')
 
     print('done in {}'.format(datetime.datetime.now() - dt))

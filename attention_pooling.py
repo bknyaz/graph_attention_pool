@@ -12,16 +12,16 @@ class AttentionPooling(nn.Module):
                  pool_type,
                  pool_arch,
                  kl_weight=None,
-                 layer=0,
-                 drop_nodes=True):
+                 drop_nodes=True,
+                 debug=False):
         super(AttentionPooling, self).__init__()
         self.pool_type = pool_type
         self.pool_arch = pool_arch
         self.kl_weight = kl_weight
         self.proj = None
-        self.layer = layer
         self.drop_nodes = drop_nodes
         self.is_topk = self.pool_type[2].lower() == 'topk'
+        self.debug = debug
         if self.is_topk:
             self.topk_ratio = float(self.pool_type[3])  # r
             assert self.topk_ratio > 0 and self.topk_ratio <= 1, ('invalid top-k ratio', self.topk_ratio, self.pool_type)
@@ -38,7 +38,7 @@ class AttentionPooling(nn.Module):
                 if len(self.pool_arch) == 2:
                     # single layer projection
                     self.proj = nn.Linear(n_in, 1, bias=False)
-                    self.proj.weight.data = torch.randn(n_in).view_as(self.proj.weight.data)  #torch.from_numpy(np.array([-2.5, 2, -2, 0]).astype(np.float32)).view(1, n_in)
+                    self.proj.weight.data = torch.randn(n_in).view_as(self.proj.weight.data)  # torch.from_numpy(np.array([-1, 1, -1, 0]).astype(np.float32)).view(1, n_in)
                     p = self.proj.weight.data.view(1, n_in)
                 else:
                     # multi-layer projection
@@ -138,14 +138,8 @@ class AttentionPooling(nn.Module):
         if self.drop_nodes:
             x, A, mask, N_nodes_pooled = self.drop_nodes_edges(x, A, mask)
 
-        # assert torch.allclose(N_nodes_pooled.float(), torch.sum(mask, 1).float())
         mask_matrix = mask.unsqueeze(2) & mask.unsqueeze(1)
         A = A * mask_matrix.float()   # or A[~mask_matrix] = 0
-
-        # idx_correct = (alpha_gt.view(B, N) > 0) & mask.view(B, N)
-        # idx_others = (alpha_gt.view(B, N) == 0) & mask.view(B, N)
-        # alpha[idx_correct]
-        # p_avg = N_nodes_pooled.float() / N_nodes_float
 
         # Add additional losses regularizing the model
         if KL_loss is not None:
@@ -158,12 +152,18 @@ class AttentionPooling(nn.Module):
             data[4]['alpha'] = []
         data[4]['alpha'].append(alpha)
 
-        # if self.debug:
-#         if 'alpha' not in params_dict:
-        #     data[4]['alpha'] = []
-        # data[4]['alpha'].append(alpha)
+        if self.debug:
+            alpha_gt = params_dict['node_attn'].view(B, N)
+            idx_correct_pool = (alpha_gt > 0)
+            idx_correct_drop = (alpha_gt == 0)
+            alpha_correct_pool = alpha[idx_correct_pool].sum() / N_nodes_float.sum()
+            alpha_correct_drop = alpha[idx_correct_drop].sum() / N_nodes_float.sum()
+            ratio_avg = (N_nodes_pooled.float() / N_nodes_float).mean()
 
-        # if not self.training:
-        #     print(self.proj.weight.data)
+            for key, values in zip(['alpha_correct_pool_debug', 'alpha_correct_drop_debug', 'ratio_avg_debug'],
+                                  [alpha_correct_pool, alpha_correct_drop, ratio_avg]):
+                if key not in params_dict:
+                    data[4][key] = []
+                data[4][key].append(values)
 
         return [x, A, mask, *data[3:]]

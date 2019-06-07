@@ -1,4 +1,4 @@
-params="--epochs 30 --lr_decay_step 20,25 --test_batch_size 200 -K 10 --aggregation mean -D mnist --n_hidden 0 --readout max -f 4,64,512 --dropout 0.5 --threads 0 --img_features mean,coord --img_noise_levels 0.75,0.75 --pool_arch fc_prev --kl_weight 100"
+params="--epochs 30 --lr_decay_step 20,25 --test_batch_size 100 -K 10 --aggregation mean -D mnist --n_hidden 0 --readout max -f 4,64,512 --dropout 0.5 --threads 0 --img_features mean,coord --img_noise_levels 0.75,0.75 --pool_arch fc_prev --kl_weight 100"
 
 results_dir=./results/mnist
 
@@ -15,5 +15,5 @@ for i in $(seq 1 1 10);
     do python main.py  $params --seed $seed --pool attn_"$pool"_threshold_skip_skip_"$thresh" --results $results_dir/"$pool" | tee $results_dir/"$pool"/"$pool"_seed"$seed".log;
   done
   python main.py  $params --seed $seed --eval_attn_train --eval_attn_test --results $results_dir/global_max | tee $results_dir/global_max/global_max_seed"$seed".log;
-  python main.py  $params --seed $seed --pool attn_sup_threshold_skip_skip_"$thresh" --alpha_ws $results_dir/global_max/alpha_WS_train_seed"$seed".pkl --results $results_dir/wsup | tee $results_dir/wsup/wsup_seed"$seed".log;
+  python main.py  $params --seed $seed --pool attn_sup_threshold_skip_skip_"$thresh" --alpha_ws $results_dir/global_max/alpha_WS_train_seed"$seed"_orig.pkl --results $results_dir/wsup | tee $results_dir/wsup/wsup_seed"$seed".log;
 done

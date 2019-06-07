@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument('--img_noise_levels', type=str, default='0.75,1.25', help='Gaussian noise standard deviations for grayscale and color image features')
     parser.add_argument('--log_interval', type=int, default=400, help='print interval')
     parser.add_argument('--results', type=str, default='./results',
-                        help='directory to save model checkpoints and other results')
+                        help='directory to save model checkpoints and other results, set to None to prevent saving anything')
     parser.add_argument('--device', type=str, default='cuda', choices=['cuda', 'cpu'], help='cuda/cpu')
     parser.add_argument('--seed', type=int, default=11, help='seed for shuffling nodes')
     parser.add_argument('--threads', type=int, default=0, help='number of threads for data loader')
@@ -82,10 +82,12 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
         if feature_stats is not None:
             data[0] = (data[0] - feature_stats[0]) / feature_stats[1]
         if batch_idx == 0 and epoch <= 1:
-            sanity_check(model.eval(), data)  # to disable the effect of dropout or other regularizers that can change behavior from batch to batch
+            sanity_check(model.eval(), copy_batch(data))  # to disable the effect of dropout or other regularizers that can change behavior from batch to batch
             model.train()
         optimizer.zero_grad()
-        output, other_losses, alpha = model(data)
+        output, other_outputs = model(data)
+        other_losses = other_outputs['reg'] if 'reg' in other_outputs else []
+        alpha = other_outputs['alpha'] if 'alpha' in other_outputs else []
         targets = data[3]
         loss = loss_fn(output, targets)
         for l in other_losses:
@@ -129,6 +131,8 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
     if eval_attn:
         alpha_pred[0] = []
         print('testing with evaluation of attention: takes longer time')
+    if args.debug:
+        debug_data = {}
 
     with torch.no_grad():
         for batch_idx, data in enumerate(test_loader):
@@ -137,7 +141,7 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
             if feature_stats is not None:
                 data[0] = (data[0] - feature_stats[0]) / feature_stats[1]
             if batch_idx == 0 and epoch <= 1:
-                sanity_check(model, data)
+                sanity_check(model, copy_batch(data))
 
             if noises is not None:
                 noise = noises[n_samples:n_samples + len(data[0])].to(device) * img_noise_level
@@ -145,7 +149,15 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
                     noise = noise.unsqueeze(2)
                 data[0][:, :, :3] = data[0][:, :, :3] + noise
 
-            output, other_losses, alpha = model(data)
+            output, other_outputs = model(data)
+            other_losses = other_outputs['reg'] if 'reg' in other_outputs else []
+            alpha = other_outputs['alpha'] if 'alpha' in other_outputs else []
+            if args.debug:
+                for key in other_outputs:
+                    if key.find('debug') >= 0:
+                        if key not in debug_data:
+                            debug_data[key] = []
+                        debug_data[key].append([d.data.cpu().numpy() for d in other_outputs[key]])
             loss = loss_fn(output, data[3], reduction='sum')
             for l in other_losses:
                 loss += l
@@ -164,11 +176,8 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
                     alpha_pred[layer].append(alpha[layer].data.cpu().numpy())
 
             n_samples += len(data[0])
-            if eval_attn: # and n_samples % 10 == 0:
+            if eval_attn:
                 print('{}/{} samples processed'.format(n_samples, len(test_loader.dataset)))
-
-            # if eval_attn and n_samples > 10:
-            #     break
 
     assert n_samples == len(test_loader.dataset), (n_samples, len(test_loader.dataset))
 
@@ -194,6 +203,11 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
     print('{} set (epoch {}): Avg loss: {:.4f}, Acc metric: {}/{} ({:.2f}%)\t AttnAUC: {}\t avg sec/iter: {:.4f}\n'.format(
         split.capitalize(), epoch, test_loss_avg, correct, n_samples, acc,
         ['%.2f' % a for a in attn_AUC(alpha_GT, alpha_pred)], time_iter / (batch_idx + 1)))
+
+    if args.debug:
+        for key in debug_data:
+            for layer in range(len(debug_data[key][0])):
+                print('{} (layer={}): {:.5f}'.format(key, layer, np.mean([d[layer] for d in debug_data[key]])))
 
     if eval_attn:
         if results_dir in [None, 'None']:

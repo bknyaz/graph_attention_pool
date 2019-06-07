@@ -165,7 +165,7 @@ class ChebyGIN(nn.Module):
 
         self.pool = None if pool is None else pool.split('_')
         self.pool_arch = None if pool_arch is None else pool_arch.split('_')
-
+        self.debug = debug
         n_prev = None
         layers = []
         for layer, f in enumerate(filters):
@@ -175,7 +175,7 @@ class ChebyGIN(nn.Module):
             if self.pool is not None and len(self.pool) > len(filters) + layer and self.pool[layer + 3] != 'skip':
                 layers.append(AttentionPooling(in_features=n_in, in_features_prev=n_prev,
                                                pool_type=self.pool[:3] + [self.pool[layer + 3]],
-                                               pool_arch=self.pool_arch, kl_weight=kl_weight))
+                                               pool_arch=self.pool_arch, kl_weight=kl_weight, debug=debug))
 
             # Graph convolution layers
             layers.append(ChebyGINLayer(in_features=n_in,
@@ -194,11 +194,6 @@ class ChebyGIN(nn.Module):
         self.fc = nn.Sequential(*(([nn.Dropout(p=dropout)] if dropout > 0 else []) + [nn.Linear(filters[-1], out_features)]))
 
     def forward(self, data):
-        data[4]['reg'] = []
-        data[4]['alpha'] = []
         data = self.layers(data)
         y = self.fc(data[0])  # B,out_features
-        params_dict = data[4]
-        reg = params_dict['reg'] if 'reg' in params_dict else []
-        alpha = params_dict['alpha'] if 'alpha' in params_dict else []  # predicted attention coefficients
-        return y, reg, alpha
+        return y, data[4]

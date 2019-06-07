@@ -146,13 +146,21 @@ def shuffle_nodes(batch):
     return [x, A, mask, labels, params_dict]
 
 
+def copy_batch(data):
+    data_cp = []
+    for i in range(len(data)):
+        if isinstance(data[i], dict):
+            data_cp.append({key: data[i][key].clone() for key in data[i]})
+        else:
+            data_cp.append(data[i].clone())
+    return data_cp
+
+
 def sanity_check(model, data):
     with torch.no_grad():
-        output1, other_losses1, _ = model(data)
-        output2, other_losses2, _ = model(shuffle_nodes(data))
+        output1 = model(data)[0]
+        output2 = model(shuffle_nodes(data))[0]
         assert torch.allclose(output1, output2, rtol=1e-02, atol=1e-03), torch.norm(output1 - output2)
-        for l1, l2 in zip(other_losses1, other_losses2):
-            assert torch.allclose(l1, l2), (l1, l2)
     print('model is checked for nodes shuffling')
 
 

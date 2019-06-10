@@ -42,6 +42,7 @@ def parse_args():
     parser.add_argument('--pool', type=str, default=None, help='type of pooling between layers')
     parser.add_argument('--pool_arch', type=str, default=None, help='pooling layers architecture')
     parser.add_argument('--img_features', type=str, default='mean,coord', help='which image features to use as node features')
+    parser.add_argument('--n_nodes', type=int, default=25, help='maximum number of nodes in the training set for collab, proteins and dd')
     # Auxiliary arguments
     parser.add_argument('--validation', action='store_true', default=False, help='run in the validation mode')
     parser.add_argument('--debug', action='store_true', default=False, help='evaluate on the test set after each epoch (only for visualization purposes)')
@@ -62,6 +63,8 @@ def parse_args():
     args.filters = list(map(int, args.filters.split(',')))
     args.img_features = args.img_features.split(',')
     args.img_noise_levels = list(map(float, args.img_noise_levels.split(',')))
+    args.pool = None if args.pool in [None, 'None'] else args.pool.split('_')
+    args.pool_arch = None if args.pool_arch in [None, 'None'] else args.pool_arch.split('_')
 
     for arg in vars(args):
         print(arg, getattr(args, arg))
@@ -69,7 +72,7 @@ def parse_args():
     return args
 
 
-def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, feature_stats=None):
+def train(model, train_loader, optimizer, epoch, args, loss_fn, feature_stats=None):
     model.train()
     optimizer.zero_grad()
     n_samples, correct, train_loss = 0, 0, 0
@@ -78,11 +81,11 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
 
     # with torch.autograd.set_detect_anomaly(True):
     for batch_idx, data in enumerate(train_loader):
-        data = data_to_device(data, device)
+        data = data_to_device(data, args.device)
         if feature_stats is not None:
             data[0] = (data[0] - feature_stats[0]) / feature_stats[1]
         if batch_idx == 0 and epoch <= 1:
-            sanity_check(model.eval(), copy_batch(data))  # to disable the effect of dropout or other regularizers that can change behavior from batch to batch
+            sanity_check(model.eval(), data)  # to disable the effect of dropout or other regularizers that can change behavior from batch to batch
             model.train()
         optimizer.zero_grad()
         output, other_outputs = model(data)
@@ -109,7 +112,7 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
         acc = 100. * correct / n_samples  # average over all examples in the dataset
         train_loss_avg  = train_loss / (batch_idx + 1)
 
-        if (batch_idx > 0 and batch_idx % log_interval == 0) or batch_idx == len(train_loader) - 1:
+        if (batch_idx > 0 and batch_idx % args.log_interval == 0) or batch_idx == len(train_loader) - 1:
             print('Train set (epoch {}): [{}/{} ({:.0f}%)]\tLoss: {:.4f} (avg: {:.4f}), other losses: {}\tAcc metric: {}/{} ({:.2f}%)\t AttnAUC: {}\t avg sec/iter: {:.4f}'.format(
                 epoch, n_samples, len(train_loader.dataset), 100. * n_samples / len(train_loader.dataset),
                 loss_item, train_loss_avg, ['%.4f' % l.item() for l in other_losses],
@@ -122,7 +125,7 @@ def train(model, train_loader, optimizer, epoch, device, log_interval, loss_fn, 
     return train_loss, acc
 
 
-def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir, seed, feature_stats=None, noises=None, img_noise_level=None, eval_attn=False, alpha_WS_name=''):
+def test(model, test_loader, epoch, loss_fn, split, args, feature_stats=None, noises=None, img_noise_level=None, eval_attn=False, alpha_WS_name=''):
     model.eval()
     n_samples, correct, test_loss = 0, 0, 0
     pred, targets, N_nodes = [], [], []
@@ -137,14 +140,14 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
     with torch.no_grad():
         for batch_idx, data in enumerate(test_loader):
             optimizer.zero_grad()
-            data = data_to_device(data, device)
+            data = data_to_device(data, args.device)
             if feature_stats is not None:
                 data[0] = (data[0] - feature_stats[0]) / feature_stats[1]
             if batch_idx == 0 and epoch <= 1:
-                sanity_check(model, copy_batch(data))
+                sanity_check(model, data)
 
             if noises is not None:
-                noise = noises[n_samples:n_samples + len(data[0])].to(device) * img_noise_level
+                noise = noises[n_samples:n_samples + len(data[0])].to(args.device) * img_noise_level
                 if len(noise.shape) == 2:
                     noise = noise.unsqueeze(2)
                 data[0][:, :, :3] = data[0][:, :, :3] + noise
@@ -165,10 +168,10 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
             pred.append(output.detach())
             targets.append(data[3].detach())
             N_nodes.append(data[4]['N_nodes'])
-            alpha_GT.append(data[4]['node_attn'].data.cpu().numpy())
+            alpha_GT.append(data[4]['node_attn_GT' if 'node_attn_GT' in data[4] else 'node_attn'].data.cpu().numpy())
             if eval_attn:
                 assert len(alpha) == 0, ('invalid mode, eval_attn should be false')
-                alpha_pred[0].append(attn_heatmaps(model, device, data, output.data, test_loader.batch_size, constant_mask=args.dataset=='mnist').data.cpu().numpy())
+                alpha_pred[0].append(attn_heatmaps(model, args.device, data, output.data, test_loader.batch_size, constant_mask=args.dataset=='mnist').data.cpu().numpy())
             else:
                 for layer in range(len(alpha)):
                     if layer not in alpha_pred:
@@ -184,12 +187,12 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
     pred = torch.cat(pred)
     targets = torch.cat(targets)
     N_nodes = torch.cat(N_nodes)
-    if dataset.find('colors') >= 0:
+    if args.dataset.find('colors') >= 0:
         correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=25)
         if pred.shape[0] > 2500:
             correct += count_correct(pred[2500:5000], targets[2500:5000], N_nodes=N_nodes[2500:5000], N_nodes_min=26, N_nodes_max=200)
             correct += count_correct(pred[5000:], targets[5000:], N_nodes=N_nodes[5000:], N_nodes_min=26, N_nodes_max=200)
-    elif dataset == 'triangles':
+    elif args.dataset == 'triangles':
         correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=25)
         if data[0].shape[1] > 25:
             correct += count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=26, N_nodes_max=100)
@@ -210,10 +213,13 @@ def test(model, test_loader, epoch, device, loss_fn, split, dataset, results_dir
                 print('{} (layer={}): {:.5f}'.format(key, layer, np.mean([d[layer] for d in debug_data[key]])))
 
     if eval_attn:
-        if results_dir in [None, 'None']:
-            print('skip saving alpha values, invalid results dir: %s' % results_dir)
+        if args.results in [None, 'None']:
+            print('skip saving alpha values, invalid results dir: %s' % args.results)
         else:
-            with open(pjoin(results_dir, 'alpha_WS_%s_seed%d_%s.pkl' % (split, seed, alpha_WS_name)), 'wb') as f:
+            file_path = pjoin(args.results, '%s_alpha_WS_%s_seed%07d_%s.pkl' % (args.dataset, split, args.seed, alpha_WS_name))
+            if os.path.isfile(file_path):
+                print('WARNING: file %s exists and will be overwritten' % file_path)
+            with open(file_path, 'wb') as f:
                 pickle.dump(alpha_pred[0], f, protocol=2)
 
     return test_loss, acc
@@ -223,9 +229,9 @@ def save_checkpoint(model, scheduler, optimizer, args, epoch):
     if args.results in [None, 'None']:
         print('skip saving checkpoint, invalid results dir: %s' % args.results)
         return
-    fname = '%s/checkpoint_%s_epoch%d_seed%d.pth.tar' % (args.results, args.dataset, epoch, args.seed)
+    file_path = '%s/checkpoint_%s_%s_epoch%d_seed%07d.pth.tar' % (args.results, platform.node(), args.dataset, epoch, args.seed)
     try:
-        print('saving the model to %s' % fname)
+        print('saving the model to %s' % file_path)
         state = {
             'epoch': epoch,
             'args': args,
@@ -233,11 +239,37 @@ def save_checkpoint(model, scheduler, optimizer, args, epoch):
             'scheduler': scheduler.state_dict(),
             'optimizer': optimizer.state_dict(),
         }
-        if os.path.isfile(fname):
-            print('WARNING: file %s exists and will be overwritten' % fname)
-        torch.save(state, fname)
+        if os.path.isfile(file_path):
+            print('WARNING: file %s exists and will be overwritten' % file_path)
+        torch.save(state, file_path)
     except Exception as e:
         print('error saving the model', e)
+
+
+def create_model_optimizer(in_features, out_features, args):
+    model = ChebyGIN(in_features=in_features,
+                     out_features=out_features,
+                     filters=args.filters,
+                     K=args.filter_scale,
+                     n_hidden=args.n_hidden,
+                     aggregation=args.aggregation,
+                     dropout=args.dropout,
+                     readout=args.readout,
+                     pool=args.pool,
+                     pool_arch=args.pool_arch,
+                     kl_weight=args.kl_weight,
+                     debug=args.debug)
+    print(model)
+    # Compute the total number of trainable parameters
+    print('model capacity: %d' %
+          np.sum([np.prod(p.size()) if p.requires_grad else 0 for p in model.parameters()]))
+
+    model.to(args.device)
+
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wdecay, betas=(0.5, 0.999))
+    scheduler = lr_scheduler.MultiStepLR(optimizer, args.lr_decay_step, gamma=0.1)
+
+    return model, optimizer, scheduler
 
 
 if __name__ == '__main__':
@@ -269,7 +301,7 @@ if __name__ == '__main__':
         use_mean_px = 'mean' in args.img_features
         use_coord = 'coord' in args.img_features
         assert use_mean_px, ('this mode is not well supported', use_mean_px)
-        gt_attn_threshold = 0 if (args.pool is not None and args.pool[1] == 'gt' and args.filter_scale > 1) else 0.5
+        gt_attn_threshold = 0 if (args.pool is not None and args.pool[1] in ['gt'] and args.filter_scale > 1) else 0.5
         if args.dataset == 'mnist':
             train_dataset = MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor(), attn_coef=args.alpha_ws)
         else:
@@ -325,6 +357,8 @@ if __name__ == '__main__':
         in_features = np.max((in_features, 1))  # in_features=1 if neither mean nor coord are used  (dummy features will be used in this case)
         out_features = 10
     else:
+        datareader = DataReader(data_dir=args.data_dir, N_nodes=args.n_nodes, rnd_state=rnd, folds=10)
+
         raise NotImplementedError(args.dataset)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.threads, collate_fn=collate_fn)
@@ -332,27 +366,7 @@ if __name__ == '__main__':
     train_loader_test = DataLoader(train_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
 
-    model = ChebyGIN(in_features=in_features,
-                     out_features=out_features,
-                     filters=args.filters,
-                     K=args.filter_scale,
-                     n_hidden=args.n_hidden,
-                     aggregation=args.aggregation,
-                     dropout=args.dropout,
-                     readout=args.readout,
-                     pool=args.pool,
-                     pool_arch=args.pool_arch,
-                     kl_weight=args.kl_weight,
-                     debug=args.debug)
-    print(model)
-    # Compute the total number of trainable parameters
-    print('model capacity: %d' %
-          np.sum([np.prod(p.size()) if p.requires_grad else 0 for p in model.parameters()]))
-
-    model.to(args.device)
-
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wdecay, betas=(0.5, 0.999))
-    scheduler = lr_scheduler.MultiStepLR(optimizer, args.lr_decay_step, gamma=0.1)
+    model, optimizer, scheduler = create_model_optimizer(in_features, out_features, args)
 
     feature_stats = None
     if args.dataset in ['mnist', 'mnist-75sp']:
@@ -360,8 +374,8 @@ if __name__ == '__main__':
 
     # Test function wrapper
     test_fn = lambda loader, epoch, split, noises, img_noise_level, eval_attn, alpha_WS_name: \
-        test(model, loader, epoch, args.device, loss_fn, split, args.dataset, args.results, args.seed,
-             feature_stats, noises=noises, img_noise_level=img_noise_level, eval_attn=eval_attn, alpha_WS_name=alpha_WS_name)
+        test(model, loader, epoch, loss_fn, split, args, feature_stats,
+             noises=noises, img_noise_level=img_noise_level, eval_attn=eval_attn, alpha_WS_name=alpha_WS_name)
 
     for epoch in range(1, args.epochs + 1):
         scheduler.step()
@@ -370,7 +384,7 @@ if __name__ == '__main__':
 
         # train_loss, acc = test_fn(train_loader_test, epoch, 'train', None, None, True, 'orig')
 
-        train_loss, acc = train(model, train_loader, optimizer, epoch, args.device, args.log_interval, loss_fn, feature_stats)
+        train_loss, acc = train(model, train_loader, optimizer, epoch, args, loss_fn, feature_stats)
         if eval_epoch:
             save_checkpoint(model, scheduler, optimizer, args, epoch)
             # Report Training accuracy and other metrics on the training set
@@ -388,3 +402,15 @@ if __name__ == '__main__':
                 test_loss, acc = test_fn(test_loader, epoch, 'test', color_noises, args.img_noise_levels[1], eval_attn, 'noisy-c')
 
     print('done in {}'.format(datetime.datetime.now() - dt))
+
+
+def cross_validation(datareader, model_fn, args, folds=10):
+    for fold in range(folds):
+        train_dataset = GraphData(datareader, fold, 'train')
+        val_dataset = GraphData(datareader, fold, 'val')
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.threads, collate_fn=collate_fn)
+        # A loader to test and evaluate attn on the training set (shouldn't be shuffled and have larger batch size multiple of 50)
+        train_loader_val = DataLoader(train_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
+
+        model = model_fn()

@@ -158,9 +158,13 @@ def copy_batch(data):
 
 def sanity_check(model, data):
     with torch.no_grad():
-        output1 = model(data)[0]
-        output2 = model(shuffle_nodes(data))[0]
-        assert torch.allclose(output1, output2, rtol=1e-02, atol=1e-03), torch.norm(output1 - output2)
+        output1 = model(copy_batch(data))[0]
+        output2 = model(shuffle_nodes(copy_batch(data)))[0]
+        if not torch.allclose(output1, output2, rtol=1e-02, atol=1e-03):
+            print('WARNING: model outputs different depending on the nodes order', (torch.norm(output1 - output2),
+                                                                                    torch.max(output1 - output2),
+                                                                                    torch.max(output1),
+                                                                                    torch.max(output2)))
     print('model is checked for nodes shuffling')
 
 

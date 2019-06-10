@@ -43,19 +43,25 @@ def collate_batch_images(batch, A, mask, use_mean_px=True, coord=None, gt_attn_t
     params_dict = {'N_nodes': torch.zeros(B, dtype=torch.long) + N_nodes}
     has_attn = len(batch[0]) > 2
     if has_attn:
-        GT_attn = torch.from_numpy(np.stack([batch[b][2].reshape(N_nodes) for b in range(B)]).astype(np.float32)).view(B, N_nodes)
-    x = None
+        attn_WS = torch.from_numpy(np.stack([batch[b][2].reshape(N_nodes) for b in range(B)]).astype(np.float32)).view(B, N_nodes)
+        attn_WS = attn_WS / (attn_WS.sum(dim=1, keepdim=True) + 1e-7)
+        params_dict.update({'node_attn': attn_WS})  # use these scores for training
+
     if use_mean_px:
         x = torch.stack([batch[b][0].view(C, N_nodes).t() for b in range(B)]).float()
-        if not has_attn:
-            if gt_attn_threshold == 0:
-                GT_attn = (x > 0).view(B, N_nodes).float()
-            else:
-                GT_attn = x.view(B, N_nodes).float().clone()
-                GT_attn[GT_attn < gt_attn_threshold] = 0
+        if gt_attn_threshold == 0:
+            GT_attn = (x > 0).view(B, N_nodes).float()
+        else:
+            GT_attn = x.view(B, N_nodes).float().clone()
+            GT_attn[GT_attn < gt_attn_threshold] = 0
         GT_attn = GT_attn / (GT_attn.sum(dim=1, keepdim=True) + 1e-7)
 
-        params_dict.update({'node_attn': GT_attn})
+        if has_attn:
+            params_dict.update({'node_attn_GT': GT_attn})  # use this for evaluation of attention
+        else:
+            params_dict.update({'node_attn': GT_attn})
+    else:
+        raise NotImplementedError('this case is not well supported')
 
     if coord is not None:
         if use_mean_px:
@@ -124,11 +130,14 @@ class MNIST(torchvision.datasets.MNIST):
         if attn_coef is not None and train:
             print('loading weakly-supervised labels from %s' % attn_coef)
             with open(attn_coef, 'rb') as f:
-                self.alpha_WS = pickle.load(f)
-            # self.alpha_WS = []
-            # for i in range(len(self.train_labels)):
-            #     gt_attn = np.random.rand(28 * 28) > 0.5
-            #     self.alpha_WS.append(gt_attn / (np.sum(gt_attn) + 1e-7))
+                alpha_WS = pickle.load(f)
+            # if isinstance(alpha_WS[0], list):
+            self.alpha_WS = []
+            for alpha in alpha_WS:
+                self.alpha_WS.extend(alpha)
+            # else:
+            #     self.alpha_WS = alpha_WS
+            print(train, len(self.alpha_WS))
 
     def __getitem__(self, index):
         img, target = super(MNIST, self).__getitem__(index)
@@ -306,3 +315,249 @@ class SyntheticGraphs(torch.utils.data.Dataset):
         data = list_to_torch(data)  # convert to torch
 
         return data
+
+
+class GraphData(torch.utils.data.Dataset):
+    def __init__(self,
+                 datareader,
+                 fold_id,
+                 split):  # train, val, train_val, test
+        self.fold_id = fold_id
+        self.split = split
+        self.set_fold(datareader.data, fold_id)
+
+    def set_fold(self, data, fold_id):
+
+        self.total = len(data['targets'])
+        self.N_nodes_max = data['N_nodes_max']
+        self.num_classes = data['num_classes']
+        self.num_features = data['num_features']
+        if self.split in ['train', 'val']:
+            self.idx = data['splits'][self.split][fold_id]
+        else:
+            assert self.split in ['train_val', 'test'], ('unexpected split', self.split)
+            self.idx = data['splits'][self.split]
+
+        # use deepcopy to make sure we don't alter objects in folds
+        self.labels = copy.deepcopy([data['targets'][i] for i in self.idx])
+        self.adj_list = copy.deepcopy([data['adj_list'][i] for i in self.idx])
+        self.features_onehot = copy.deepcopy([data['features_onehot'][i] for i in self.idx])
+        print('%s: %d/%d' % (self.split.upper(), len(self.labels), len(data['targets'])))
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, index):
+        # convert to torch
+        return [torch.from_numpy(self.features_onehot[index]).float(),  # node_features
+                torch.from_numpy(self.adj_list[index]).float(),  # adjacency matrix
+                int(self.labels[index])]
+
+
+class DataReader():
+    '''
+    Class to read the txt files containing all data of the dataset
+    Should work for any dataset from https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets
+    '''
+
+    def __init__(self,
+                 data_dir,  # folder with txt files
+                 N_nodes,  # maximum number of nodes in the training set
+                 rnd_state=None,
+                 use_cont_node_attr=False, # use or not additional float valued node attributes available in some datasets
+                 folds=10):
+
+        self.data_dir = data_dir
+        self.rnd_state = np.random.RandomState() if rnd_state is None else rnd_state
+        self.use_cont_node_attr = use_cont_node_attr
+        self.N_nodes = N_nodes
+        files = os.listdir(self.data_dir)
+        data = {}
+        nodes, graphs = self.read_graph_nodes_relations(
+            list(filter(lambda f: f.find('graph_indicator') >= 0, files))[0])
+        data['features'] = self.read_node_features(list(filter(lambda f: f.find('node_labels') >= 0, files))[0],
+                                                   nodes, graphs, fn=lambda s: int(s.strip()))
+        data['adj_list'] = self.read_graph_adj(list(filter(lambda f: f.find('_A') >= 0, files))[0], nodes, graphs)
+        data['targets'] = np.array(
+            self.parse_txt_file(list(filter(lambda f: f.find('graph_labels') >= 0, files))[0],
+                                line_parse_fn=lambda s: int(float(s.strip()))))
+
+        if self.use_cont_node_attr:
+            data['attr'] = self.read_node_features(list(filter(lambda f: f.find('node_attributes') >= 0, files))[0],
+                                                   nodes, graphs,
+                                                   fn=lambda s: np.array(list(map(float, s.strip().split(',')))))
+
+        features, n_edges, degrees = [], [], []
+        for sample_id, adj in enumerate(data['adj_list']):
+            N = len(adj)  # number of nodes
+            if data['features'] is not None:
+                assert N == len(data['features'][sample_id]), (N, len(data['features'][sample_id]))
+            n = np.sum(adj)  # total sum of edges
+            assert n % 2 == 0, n
+            n_edges.append(int(n / 2))  # undirected edges, so need to divide by 2
+            if not np.allclose(adj, adj.T):
+                print(sample_id, 'not symmetric')
+            degrees.extend(list(np.sum(adj, 1)))
+            features.append(np.array(data['features'][sample_id]))
+
+        # Create features over graphs as one-hot vectors for each node
+        features_all = np.concatenate(features)
+        features_min = features_all.min()
+        num_features = int(features_all.max() - features_min + 1)  # number of possible values
+
+        features_onehot = []
+        for i, x in enumerate(features):
+            feature_onehot = np.zeros((len(x), num_features))
+            for node, value in enumerate(x):
+                feature_onehot[node, value - features_min] = 1
+            if self.use_cont_node_attr:
+                feature_onehot = np.concatenate((feature_onehot, np.array(data['attr'][i])), axis=1)
+            features_onehot.append(feature_onehot)
+
+        if self.use_cont_node_attr:
+            num_features = features_onehot[0].shape[1]
+
+        shapes = [len(adj) for adj in data['adj_list']]
+        labels = data['targets']  # graph class labels
+        labels -= np.min(labels)  # to start from 0
+
+        classes = np.unique(labels)
+        num_classes = len(classes)
+
+        if not np.all(np.diff(classes) == 1):
+            print('making labels sequential, otherwise pytorch might crash')
+            labels_new = np.zeros(labels.shape, dtype=labels.dtype) - 1
+            for lbl in range(num_classes):
+                labels_new[labels == classes[lbl]] = lbl
+            labels = labels_new
+            classes = np.unique(labels)
+            assert len(np.unique(labels)) == num_classes, np.unique(labels)
+
+        def stats(x):
+            return (np.mean(x), np.std(x), np.min(x), np.max(x))
+
+        print('N nodes avg/std/min/max: \t%.2f/%.2f/%d/%d' % stats(shapes))
+        print('N edges avg/std/min/max: \t%.2f/%.2f/%d/%d' % stats(n_edges))
+        print('Node degree avg/std/min/max: \t%.2f/%.2f/%d/%d' % stats(degrees))
+        print('Node features dim: \t\t%d' % num_features)
+        print('N classes: \t\t\t%d' % num_classes)
+        print('Classes: \t\t\t%s' % str(classes))
+        for lbl in classes:
+            print('Class %d: \t\t\t%d samples' % (lbl, np.sum(labels == lbl)))
+
+        for u in np.unique(features_all):
+            print('feature {}, count {}/{}'.format(u, np.count_nonzero(features_all == u), len(features_all)))
+
+        N_graphs = len(labels)  # number of samples (graphs) in data
+        assert N_graphs == len(data['adj_list']) == len(features_onehot), 'invalid data'
+
+        # Create test sets first
+        N_graphs = len(labels)
+        shapes = np.array([len(adj) for adj in data['adj_list']])
+        train_ids, val_ids, train_val_ids, test_ids = self.split_ids_shape(np.arange(N_graphs), shapes, N_nodes, folds=folds)
+
+        # Create train sets
+        splits = {'train': [], 'val': [], 'train_val': train_val_ids, 'test': test_ids}
+        for fold in range(folds):
+            splits['train'].append(train_ids[fold])
+            splits['val'].append(train_ids[fold])
+
+        data['features_onehot'] = features_onehot
+        data['targets'] = labels
+        data['splits'] = splits
+        data['N_nodes_max'] = np.max(shapes)  # max number of nodes
+        data['num_features'] = num_features
+        data['num_classes'] = num_classes
+
+        self.data = data
+
+    def split_ids_shape(self, ids_all, shapes, N_nodes, folds=1):
+        small_graphs_ind = np.where(shapes <= N_nodes)[0]
+        print('{}/{} graphs with at least {} nodes'.format(len(small_graphs_ind), len(shapes), N_nodes))
+        idx = self.rnd_state.permutation(len(small_graphs_ind))
+        if len(idx) > 1000:
+            n = 1000
+        else:
+            n = 500
+        train_val_ids = small_graphs_ind[idx[:n]]
+        test_ids = small_graphs_ind[idx[n:]]
+        large_graphs_ind = np.where(shapes > N_nodes)[0]
+        test_ids = np.concatenate((test_ids, large_graphs_ind))
+
+        assert np.all(
+            np.unique(np.concatenate((train_val_ids, test_ids))) == sorted(ids_all)), 'some graphs are missing in the test sets'
+        train_ids, val_ids = self.split_ids(train_val_ids, folds=folds)
+        # Sanity checks
+        for fold in range(folds):
+            ind = np.concatenate((train_ids[fold], val_ids[fold]))
+            assert len(train_ids[fold]) + len(val_ids[fold]) == len(np.unique(ind)) == len(ind) == len(train_val_ids), 'invalid splits'
+
+        return train_ids, val_ids, train_val_ids, test_ids
+
+    def split_ids(self, ids, folds=10):
+        n = len(ids)
+        stride = int(np.ceil(n / float(folds)))
+        test_ids = [ids[i: i + stride] for i in range(0, n, stride)]
+        assert np.all(
+            np.unique(np.concatenate(test_ids)) == sorted(ids)), 'some graphs are missing in the test sets'
+        assert len(test_ids) == folds, 'invalid test sets'
+        train_ids = []
+        for fold in range(folds):
+            train_ids.append(np.array([e for e in ids if e not in test_ids[fold]]))
+            assert len(train_ids[fold]) + len(test_ids[fold]) == len(
+                np.unique(list(train_ids[fold]) + list(test_ids[fold]))) == n, 'invalid splits'
+
+        return train_ids, test_ids
+
+    def parse_txt_file(self, fpath, line_parse_fn=None):
+        with open(pjoin(self.data_dir, fpath), 'r') as f:
+            lines = f.readlines()
+        data = [line_parse_fn(s) if line_parse_fn is not None else s for s in lines]
+        return data
+
+    def read_graph_adj(self, fpath, nodes, graphs):
+        edges = self.parse_txt_file(fpath, line_parse_fn=lambda s: s.split(','))
+        adj_dict = {}
+        for edge in edges:
+            node1 = int(edge[0].strip()) - 1  # -1 because of zero-indexing in our code
+            node2 = int(edge[1].strip()) - 1
+            graph_id = nodes[node1]
+            assert graph_id == nodes[node2], ('invalid data', graph_id, nodes[node2])
+            if graph_id not in adj_dict:
+                n = len(graphs[graph_id])
+                adj_dict[graph_id] = np.zeros((n, n))
+            ind1 = np.where(graphs[graph_id] == node1)[0]
+            ind2 = np.where(graphs[graph_id] == node2)[0]
+            assert len(ind1) == len(ind2) == 1, (ind1, ind2)
+            adj_dict[graph_id][ind1, ind2] = 1
+
+        adj_list = [adj_dict[graph_id] for graph_id in sorted(list(graphs.keys()))]
+
+        return adj_list
+
+    def read_graph_nodes_relations(self, fpath):
+        graph_ids = self.parse_txt_file(fpath, line_parse_fn=lambda s: int(s.rstrip()))
+        nodes, graphs = {}, {}
+        for node_id, graph_id in enumerate(graph_ids):
+            if graph_id not in graphs:
+                graphs[graph_id] = []
+            graphs[graph_id].append(node_id)
+            nodes[node_id] = graph_id
+        graph_ids = np.unique(list(graphs.keys()))
+        for graph_id in graph_ids:
+            graphs[graph_id] = np.array(graphs[graph_id])
+        return nodes, graphs
+
+    def read_node_features(self, fpath, nodes, graphs, fn):
+        node_features_all = self.parse_txt_file(fpath, line_parse_fn=fn)
+        node_features = {}
+        for node_id, x in enumerate(node_features_all):
+            graph_id = nodes[node_id]
+            if graph_id not in node_features:
+                node_features[graph_id] = [None] * len(graphs[graph_id])
+            ind = np.where(graphs[graph_id] == node_id)[0]
+            assert len(ind) == 1, ind
+            assert node_features[graph_id][ind[0]] is None, node_features[graph_id][ind[0]]
+            node_features[graph_id][ind[0]] = x
+        node_features_lst = [node_features[graph_id] for graph_id in sorted(list(graphs.keys()))]
+        return node_features_lst

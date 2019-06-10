@@ -157,14 +157,13 @@ class ChebyGIN(nn.Module):
                  aggregation='mean',
                  dropout=0,
                  readout='max',
-                 pool='attn_gt_threshold_0_skip_skip',
-                 pool_arch='fc_prev',
+                 pool='attn_gt_threshold_0_skip_skip'.split('_'),
+                 pool_arch='fc_prev'.split('_'),
                  kl_weight=None,
                  debug=False):
         super(ChebyGIN, self).__init__()
-
-        self.pool = None if pool is None else pool.split('_')
-        self.pool_arch = None if pool_arch is None else pool_arch.split('_')
+        self.pool = pool
+        self.pool_arch = pool_arch
         self.debug = debug
         n_prev = None
         layers = []

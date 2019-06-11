@@ -54,6 +54,7 @@ def parse_args():
     parser.add_argument('--log_interval', type=int, default=400, help='print interval')
     parser.add_argument('--results', type=str, default='./results',
                         help='directory to save model checkpoints and other results, set to None to prevent saving anything')
+    parser.add_argument('--resume', type=str, default=None, help='checkpoint to load the model and optimzer states from and continue training')
     parser.add_argument('--device', type=str, default='cuda', choices=['cuda', 'cpu'], help='cuda/cpu')
     parser.add_argument('--seed', type=int, default=11, help='seed for shuffling nodes')
     parser.add_argument('--threads', type=int, default=0, help='number of threads for data loader')
@@ -171,7 +172,7 @@ def test(model, test_loader, epoch, loss_fn, split, args, feature_stats=None, no
             alpha_GT.append(data[4]['node_attn_GT' if 'node_attn_GT' in data[4] else 'node_attn'].data.cpu().numpy())
             if eval_attn:
                 assert len(alpha) == 0, ('invalid mode, eval_attn should be false')
-                alpha_pred[0].append(attn_heatmaps(model, args.device, data, output.data, test_loader.batch_size, constant_mask=args.dataset=='mnist').data.cpu().numpy())
+                alpha_pred[0].extend(attn_heatmaps(model, args.device, data, output.data, test_loader.batch_size, constant_mask=args.dataset=='mnist').data.cpu().numpy())
             else:
                 for layer in range(len(alpha)):
                     if layer not in alpha_pred:
@@ -216,7 +217,7 @@ def test(model, test_loader, epoch, loss_fn, split, args, feature_stats=None, no
         if args.results in [None, 'None']:
             print('skip saving alpha values, invalid results dir: %s' % args.results)
         else:
-            file_path = pjoin(args.results, '%s_alpha_WS_%s_seed%07d_%s.pkl' % (args.dataset, split, args.seed, alpha_WS_name))
+            file_path = pjoin(args.results, '%s_alpha_WS_%s_seed%d_%s.pkl' % (args.dataset, split, args.seed, alpha_WS_name))
             if os.path.isfile(file_path):
                 print('WARNING: file %s exists and will be overwritten' % file_path)
             with open(file_path, 'wb') as f:
@@ -229,7 +230,7 @@ def save_checkpoint(model, scheduler, optimizer, args, epoch):
     if args.results in [None, 'None']:
         print('skip saving checkpoint, invalid results dir: %s' % args.results)
         return
-    file_path = '%s/checkpoint_%s_%s_epoch%d_seed%07d.pth.tar' % (args.results, platform.node(), args.dataset, epoch, args.seed)
+    file_path = '%s/checkpoint_%s_%s_epoch%d_seed%07d.pth.tar' % (args.results, args.dataset, args.experiment_ID, epoch, args.seed)
     try:
         print('saving the model to %s' % file_path)
         state = {
@@ -244,6 +245,16 @@ def save_checkpoint(model, scheduler, optimizer, args, epoch):
         torch.save(state, file_path)
     except Exception as e:
         print('error saving the model', e)
+
+
+def load_checkpoint(model, optimizer, scheduler, file_path):
+    print('loading the model from %s' % file_path)
+    state = torch.load(file_path)
+    model.load_state_dict(state['state_dict'])
+    optimizer.load_state_dict(state['optimizer'])
+    scheduler.load_state_dict(state['scheduler'])
+    print('loading from epoch %d done' % state['epoch'])
+    return state['epoch'] + 1  # +1 because we already finished training for this epoch
 
 
 def create_model_optimizer(in_features, out_features, args):
@@ -264,12 +275,17 @@ def create_model_optimizer(in_features, out_features, args):
     print('model capacity: %d' %
           np.sum([np.prod(p.size()) if p.requires_grad else 0 for p in model.parameters()]))
 
-    model.to(args.device)
-
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wdecay, betas=(0.5, 0.999))
     scheduler = lr_scheduler.MultiStepLR(optimizer, args.lr_decay_step, gamma=0.1)
+    epoch = 1
+    if args.resume not in [None, 'None']:
+        epoch = load_checkpoint(model, optimizer, scheduler, args.resume)
+        if epoch < args.epochs + 1:
+            print('resuming training for epoch %d' % epoch)
 
-    return model, optimizer, scheduler
+    model.to(args.device)
+
+    return epoch, model, optimizer, scheduler
 
 
 if __name__ == '__main__':
@@ -277,8 +293,9 @@ if __name__ == '__main__':
     dt = datetime.datetime.now()
     print('start time:', dt)
     print('gpus: ', torch.cuda.device_count())
-
     args = parse_args()
+    args.experiment_ID = '%s_%06d' % (platform.node(), dt.microsecond)
+    print('experiment_ID: ', args.experiment_ID)
 
     if args.results not in [None, 'None'] and not os.path.isdir(args.results):
         os.mkdir(args.results)
@@ -366,40 +383,41 @@ if __name__ == '__main__':
     train_loader_test = DataLoader(train_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
 
-    model, optimizer, scheduler = create_model_optimizer(in_features, out_features, args)
+    start_epoch, model, optimizer, scheduler = create_model_optimizer(in_features, out_features, args)
 
     feature_stats = None
     if args.dataset in ['mnist', 'mnist-75sp']:
         feature_stats = compute_feature_stats(model, train_loader, args.device, n_batches=1000)
-
+    # print(pjoin(args.results, '%s_alpha_WS_%s_seed%d_%s.pkl' % (args.dataset, 'train', args.seed, 'orig')))
     # Test function wrapper
-    test_fn = lambda loader, epoch, split, noises, img_noise_level, eval_attn, alpha_WS_name: \
+    def test_fn(loader, epoch, split, eval_attn):
+        # eval_attn = (epoch == args.epochs) and args.eval_attn_test
         test(model, loader, epoch, loss_fn, split, args, feature_stats,
-             noises=noises, img_noise_level=img_noise_level, eval_attn=eval_attn, alpha_WS_name=alpha_WS_name)
+             noises=None, img_noise_level=None, eval_attn=eval_attn, alpha_WS_name='orig')
+        if args.dataset in ['mnist', 'mnist-75sp'] and split == 'test':
+            test(model, loader, epoch, loss_fn, split, args, feature_stats,
+                 noises=noises, img_noise_level=args.img_noise_levels[0], eval_attn=eval_attn, alpha_WS_name='noisy')
+            test(model, loader, epoch, loss_fn, split, args, feature_stats,
+                 noises=color_noises, img_noise_level=args.img_noise_levels[1], eval_attn=eval_attn, alpha_WS_name='noisy-c')
 
-    for epoch in range(1, args.epochs + 1):
-        scheduler.step()
-        eval_epoch = epoch <= 1 or epoch == args.epochs
-        eval_attn = (epoch == args.epochs) and args.eval_attn_train
+    if start_epoch > args.epochs:
+        print('evaluating the model')
+        test_fn(test_loader, start_epoch - 1, 'val' if args.validation else 'test', args.eval_attn_test)
+    else:
+        for epoch in range(start_epoch, args.epochs + 1):
+            eval_epoch = epoch <= 1 or epoch == args.epochs  # check for epoch == 1 just to make sure that the test function works fine for this test set before training all the way until the last epoch
+            scheduler.step()
+            # train_loss, acc = test_fn(train_loader_test, epoch, 'train', None, None, True, 'orig')
+            train_loss, acc = train(model, train_loader, optimizer, epoch, args, loss_fn, feature_stats)
+            if eval_epoch:
+                save_checkpoint(model, scheduler, optimizer, args, epoch)
+                # Report Training accuracy and other metrics on the training set
+                test_fn(train_loader_test, epoch, 'train', (epoch == args.epochs) and args.eval_attn_train)
 
-        # train_loss, acc = test_fn(train_loader_test, epoch, 'train', None, None, True, 'orig')
-
-        train_loss, acc = train(model, train_loader, optimizer, epoch, args, loss_fn, feature_stats)
-        if eval_epoch:
-            save_checkpoint(model, scheduler, optimizer, args, epoch)
-            # Report Training accuracy and other metrics on the training set
-            train_loss, acc = test_fn(train_loader_test, epoch, 'train', None, None, eval_attn, 'orig')
-
-        eval_attn = (epoch == args.epochs) and args.eval_attn_test
-        if args.validation:
-            test_loss, acc = test_fn(test_loader, epoch, 'val', None, None, eval_attn, 'orig')
-
-        elif eval_epoch or args.debug:
-            # check for epoch == 1 just to make sure that the test function works fine for this test set before training all the way until the last epoch
-            test_loss, acc = test_fn(test_loader, epoch, 'test', None, None, eval_attn, 'orig')
-            if args.dataset in ['mnist', 'mnist-75sp']:
-                test_loss, acc =  test_fn(test_loader, epoch, 'test', noises, args.img_noise_levels[0], eval_attn, 'noisy')
-                test_loss, acc = test_fn(test_loader, epoch, 'test', color_noises, args.img_noise_levels[1], eval_attn, 'noisy-c')
+            if args.validation:
+                test_fn(test_loader, epoch, 'val', (epoch == args.epochs) and args.eval_attn_test)
+            elif eval_epoch or args.debug:
+                test_fn(test_loader, epoch, 'test', (epoch == args.epochs) and args.eval_attn_test)
 
     print('done in {}'.format(datetime.datetime.now() - dt))
 

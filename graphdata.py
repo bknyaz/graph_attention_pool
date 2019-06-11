@@ -130,11 +130,11 @@ class MNIST(torchvision.datasets.MNIST):
         if attn_coef is not None and train:
             print('loading weakly-supervised labels from %s' % attn_coef)
             with open(attn_coef, 'rb') as f:
-                alpha_WS = pickle.load(f)
+                self.alpha_WS = pickle.load(f)
             # if isinstance(alpha_WS[0], list):
-            self.alpha_WS = []
-            for alpha in alpha_WS:
-                self.alpha_WS.extend(alpha)
+            # self.alpha_WS = []
+            # for alpha in alpha_WS:
+            #     self.alpha_WS.extend(alpha)
             # else:
             #     self.alpha_WS = alpha_WS
             print(train, len(self.alpha_WS))

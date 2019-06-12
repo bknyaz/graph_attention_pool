@@ -1,20 +1,10 @@
-import argparse
-import os
 import sys
-from os.path import join as pjoin
-import numpy as np
-import time
+import argparse
 import datetime
 import platform
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
-import torch.optim as optim
-import torch.optim.lr_scheduler as lr_scheduler
 from torchvision import transforms
-from chebygin import *
 from graphdata import *
-from utils import *
+from train_test import *
 
 sys.stdout.flush()
 
@@ -23,8 +13,8 @@ def parse_args():
     # Dataset
     parser.add_argument('-D', '--dataset', type=str, default='colors-3',
                         choices=['colors-3', 'colors-4', 'colors-8', 'colors-16', 'colors-32',
-                                 'triangles', 'mnist', 'mnist-75sp', 'collab', 'proteins', 'dd'],
-                        help='colors-n means the colors dataset with n-dimensional features')
+                                 'triangles', 'mnist', 'mnist-75sp', 'TU'],
+                        help='colors-n means the colors dataset with n-dimensional features: TU is any dataset from https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets')
     parser.add_argument('-d', '--data_dir', type=str, default='./data', help='path to the dataset')
     # Hyperparameters
     parser.add_argument('--epochs', type=int, default=100, help='# of the epochs')
@@ -43,6 +33,7 @@ def parse_args():
     parser.add_argument('--pool_arch', type=str, default=None, help='pooling layers architecture')
     parser.add_argument('--img_features', type=str, default='mean,coord', help='which image features to use as node features')
     parser.add_argument('--n_nodes', type=int, default=25, help='maximum number of nodes in the training set for collab, proteins and dd')
+    parser.add_argument('--cv_folds', type=int, default=5, help='number of folds for cross-validating hyperparameters for collab, proteins and dd')
     # Auxiliary arguments
     parser.add_argument('--validation', action='store_true', default=False, help='run in the validation mode')
     parser.add_argument('--debug', action='store_true', default=False, help='evaluate on the test set after each epoch (only for visualization purposes)')
@@ -73,219 +64,160 @@ def parse_args():
     return args
 
 
-def train(model, train_loader, optimizer, epoch, args, loss_fn, feature_stats=None):
-    model.train()
-    optimizer.zero_grad()
-    n_samples, correct, train_loss = 0, 0, 0
-    alpha_pred, alpha_GT = {}, []
-    start = time.time()
-
-    # with torch.autograd.set_detect_anomaly(True):
-    for batch_idx, data in enumerate(train_loader):
-        data = data_to_device(data, args.device)
-        if feature_stats is not None:
-            data[0] = (data[0] - feature_stats[0]) / feature_stats[1]
-        if batch_idx == 0 and epoch <= 1:
-            sanity_check(model.eval(), data)  # to disable the effect of dropout or other regularizers that can change behavior from batch to batch
-            model.train()
-        optimizer.zero_grad()
-        output, other_outputs = model(data)
-        other_losses = other_outputs['reg'] if 'reg' in other_outputs else []
-        alpha = other_outputs['alpha'] if 'alpha' in other_outputs else []
-        targets = data[3]
-        loss = loss_fn(output, targets)
-        for l in other_losses:
-            loss += l
-        loss_item = loss.item()
-        train_loss += loss_item
-        n_samples += len(targets)
-        loss.backward()  # accumulates gradient
-        optimizer.step()  # update weights
-        time_iter = time.time() - start
-        correct += count_correct(output.detach(), targets.detach())
-
-        alpha_GT.append(data[4]['node_attn'].data.cpu().numpy())
-        for layer in range(len(alpha)):
-            if layer not in alpha_pred:
-                alpha_pred[layer] = []
-            alpha_pred[layer].append(alpha[layer].data.cpu().numpy().flatten())
-
-        acc = 100. * correct / n_samples  # average over all examples in the dataset
-        train_loss_avg  = train_loss / (batch_idx + 1)
-
-        if (batch_idx > 0 and batch_idx % args.log_interval == 0) or batch_idx == len(train_loader) - 1:
-            print('Train set (epoch {}): [{}/{} ({:.0f}%)]\tLoss: {:.4f} (avg: {:.4f}), other losses: {}\tAcc metric: {}/{} ({:.2f}%)\t AttnAUC: {}\t avg sec/iter: {:.4f}'.format(
-                epoch, n_samples, len(train_loader.dataset), 100. * n_samples / len(train_loader.dataset),
-                loss_item, train_loss_avg, ['%.4f' % l.item() for l in other_losses],
-                correct, n_samples, acc, ['%.2f' % a for a in attn_AUC(alpha_GT, alpha_pred)],
-                time_iter / (batch_idx + 1)))
-
-    print('\n')
-    assert n_samples == len(train_loader.dataset), (n_samples, len(train_loader.dataset))
-
-    return train_loss, acc
+def load_synthetic(args):
+    train_dataset = SyntheticGraphs(args.data_dir, args.dataset, 'train')
+    test_dataset = SyntheticGraphs(args.data_dir, args.dataset, 'val' if args.validation else 'test')
+    loss_fn = mse_loss
+    collate_fn = collate_batch
+    in_features = train_dataset.feature_dim
+    out_features = 1
+    return train_dataset, test_dataset, loss_fn, collate_fn, in_features, out_features
 
 
-def test(model, test_loader, epoch, loss_fn, split, args, feature_stats=None, noises=None, img_noise_level=None, eval_attn=False, alpha_WS_name=''):
-    model.eval()
-    n_samples, correct, test_loss = 0, 0, 0
-    pred, targets, N_nodes = [], [], []
-    start = time.time()
-    alpha_pred, alpha_GT = {}, []
-    if eval_attn:
-        alpha_pred[0] = []
-        print('testing with evaluation of attention: takes longer time')
-    if args.debug:
-        debug_data = {}
-
-    with torch.no_grad():
-        for batch_idx, data in enumerate(test_loader):
-            optimizer.zero_grad()
-            data = data_to_device(data, args.device)
-            if feature_stats is not None:
-                data[0] = (data[0] - feature_stats[0]) / feature_stats[1]
-            if batch_idx == 0 and epoch <= 1:
-                sanity_check(model, data)
-
-            if noises is not None:
-                noise = noises[n_samples:n_samples + len(data[0])].to(args.device) * img_noise_level
-                if len(noise.shape) == 2:
-                    noise = noise.unsqueeze(2)
-                data[0][:, :, :3] = data[0][:, :, :3] + noise
-
-            output, other_outputs = model(data)
-            other_losses = other_outputs['reg'] if 'reg' in other_outputs else []
-            alpha = other_outputs['alpha'] if 'alpha' in other_outputs else []
-            if args.debug:
-                for key in other_outputs:
-                    if key.find('debug') >= 0:
-                        if key not in debug_data:
-                            debug_data[key] = []
-                        debug_data[key].append([d.data.cpu().numpy() for d in other_outputs[key]])
-            loss = loss_fn(output, data[3], reduction='sum')
-            for l in other_losses:
-                loss += l
-            test_loss += loss.item()
-            pred.append(output.detach())
-            targets.append(data[3].detach())
-            N_nodes.append(data[4]['N_nodes'])
-            alpha_GT.append(data[4]['node_attn_GT' if 'node_attn_GT' in data[4] else 'node_attn'].data.cpu().numpy())
-            if eval_attn:
-                assert len(alpha) == 0, ('invalid mode, eval_attn should be false')
-                alpha_pred[0].extend(attn_heatmaps(model, args.device, data, output.data, test_loader.batch_size, constant_mask=args.dataset=='mnist').data.cpu().numpy())
-            else:
-                for layer in range(len(alpha)):
-                    if layer not in alpha_pred:
-                        alpha_pred[layer] = []
-                    alpha_pred[layer].append(alpha[layer].data.cpu().numpy())
-
-            n_samples += len(data[0])
-            if eval_attn:
-                print('{}/{} samples processed'.format(n_samples, len(test_loader.dataset)))
-
-    assert n_samples == len(test_loader.dataset), (n_samples, len(test_loader.dataset))
-
-    pred = torch.cat(pred)
-    targets = torch.cat(targets)
-    N_nodes = torch.cat(N_nodes)
-    if args.dataset.find('colors') >= 0:
-        correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=25)
-        if pred.shape[0] > 2500:
-            correct += count_correct(pred[2500:5000], targets[2500:5000], N_nodes=N_nodes[2500:5000], N_nodes_min=26, N_nodes_max=200)
-            correct += count_correct(pred[5000:], targets[5000:], N_nodes=N_nodes[5000:], N_nodes_min=26, N_nodes_max=200)
-    elif args.dataset == 'triangles':
-        correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=25)
-        if data[0].shape[1] > 25:
-            correct += count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=26, N_nodes_max=100)
+def load_mnist(args):
+    use_mean_px = 'mean' in args.img_features
+    use_coord = 'coord' in args.img_features
+    assert use_mean_px, ('this mode is not well supported', use_mean_px)
+    gt_attn_threshold = 0 if (args.pool is not None and args.pool[1] in ['gt'] and args.filter_scale > 1) else 0.5
+    if args.dataset == 'mnist':
+        train_dataset = MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor(),
+                              attn_coef=args.alpha_ws)
     else:
-        correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=1e5)
+        train_dataset = MNIST75sp(args.data_dir, split='train', use_mean_px=use_mean_px, use_coord=use_coord,
+                                  gt_attn_threshold=gt_attn_threshold, attn_coef=args.alpha_ws)
 
-    time_iter = time.time() - start
-
-    test_loss_avg = test_loss / n_samples
-    acc = 100. * correct / n_samples  # average over all examples in the dataset
-    print('{} set (epoch {}): Avg loss: {:.4f}, Acc metric: {}/{} ({:.2f}%)\t AttnAUC: {}\t avg sec/iter: {:.4f}\n'.format(
-        split.capitalize(), epoch, test_loss_avg, correct, n_samples, acc,
-        ['%.2f' % a for a in attn_AUC(alpha_GT, alpha_pred)], time_iter / (batch_idx + 1)))
-
-    if args.debug:
-        for key in debug_data:
-            for layer in range(len(debug_data[key][0])):
-                print('{} (layer={}): {:.5f}'.format(key, layer, np.mean([d[layer] for d in debug_data[key]])))
-
-    if eval_attn:
-        if args.results in [None, 'None']:
-            print('skip saving alpha values, invalid results dir: %s' % args.results)
+    noises, color_noises = None, None
+    if args.validation:
+        n_val = 5000
+        if args.dataset == 'mnist':
+            train_dataset.train_data = train_dataset.train_data[:-n_val]
+            train_dataset.train_labels = train_dataset.train_labels[:-n_val]
+            test_dataset = MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
+            test_dataset.train_data = train_dataset.train_data[-n_val:]
+            test_dataset.train_labels = train_dataset.train_labels[-n_val:]
         else:
-            file_path = pjoin(args.results, '%s_alpha_WS_%s_seed%d_%s.pkl' % (args.dataset, split, args.seed, alpha_WS_name))
-            if os.path.isfile(file_path):
-                print('WARNING: file %s exists and will be overwritten' % file_path)
-            with open(file_path, 'wb') as f:
-                pickle.dump(alpha_pred[0], f, protocol=2)
+            train_dataset.train_val_split(np.arange(0, train_dataset.n_samples - n_val))
+            test_dataset = MNIST75sp(args.data_dir, split='train', use_mean_px=use_mean_px, use_coord=use_coord,
+                                     gt_attn_threshold=gt_attn_threshold)
+            test_dataset.train_val_split(np.arange(train_dataset.n_samples - n_val, train_dataset.n_samples))
+    else:
+        noise_file = pjoin(args.data_dir, '%s_noise.pt' % args.dataset.replace('-', '_'))
+        color_noise_file = pjoin(args.data_dir, '%s_color_noise.pt' % args.dataset.replace('-', '_'))
+        if args.dataset == 'mnist':
+            test_dataset = MNIST(args.data_dir, train=False, download=True, transform=transforms.ToTensor())
+            noise_shape = (len(test_dataset.test_labels), 28 * 28)
+        else:
+            test_dataset = MNIST75sp(args.data_dir, split='test', use_mean_px=use_mean_px, use_coord=use_coord,
+                                     gt_attn_threshold=gt_attn_threshold)
+            noise_shape = (len(test_dataset.labels), 75)
 
-    return test_loss, acc
+        # Generate/load noise (save it to make reproducible)
+        noises = load_save_noise(noise_file, noise_shape)
+        color_noises = load_save_noise(color_noise_file, (*(noise_shape), 3))
+
+    if args.dataset == 'mnist':
+        A, coord, mask = precompute_graph_images(train_dataset.train_data.shape[1])
+        collate_fn = lambda batch: collate_batch_images(batch, A, mask, use_mean_px=use_mean_px,
+                                                        coord=coord if use_coord else None,
+                                                        gt_attn_threshold=gt_attn_threshold)
+    else:
+        train_dataset.precompute_graph_images()
+        test_dataset.precompute_graph_images()
+        collate_fn = collate_batch
+
+    loss_fn = F.cross_entropy
+
+    in_features = 2
+    for features in args.img_features:
+        if features == 'mean':
+            in_features += 1
+        elif features == 'coord':
+            in_features += 2
+        else:
+            raise NotImplementedError(features)
+    in_features = np.max((in_features, 1))  # in_features=1 if neither mean nor coord are used  (dummy features will be used in this case)
+    out_features = 10
+
+    return train_dataset, test_dataset, loss_fn, collate_fn, in_features, out_features, noises, color_noises
 
 
-def save_checkpoint(model, scheduler, optimizer, args, epoch):
-    if args.results in [None, 'None']:
-        print('skip saving checkpoint, invalid results dir: %s' % args.results)
-        return
-    file_path = '%s/checkpoint_%s_%s_epoch%d_seed%07d.pth.tar' % (args.results, args.dataset, args.experiment_ID, epoch, args.seed)
-    try:
-        print('saving the model to %s' % file_path)
-        state = {
-            'epoch': epoch,
-            'args': args,
-            'state_dict': model.state_dict(),
-            'scheduler': scheduler.state_dict(),
-            'optimizer': optimizer.state_dict(),
-        }
-        if os.path.isfile(file_path):
-            print('WARNING: file %s exists and will be overwritten' % file_path)
-        torch.save(state, file_path)
-    except Exception as e:
-        print('error saving the model', e)
+def load_TU(args, cv_folds=5):
+    loss_fn = F.cross_entropy
+    collate_fn = collate_batch
+    if args.pool[1] == 'gt':
+        raise ValueError('ground truth attention for TU datasets is not available')
+    elif args.pool in [None, 'None']:
+        # Global pooling models
+        datareader = DataReader(data_dir=args.data_dir, N_nodes=args.n_nodes, rnd_state=rnd, folds=0)
+        train_dataset = GraphData(datareader, None, 'train_val')
+        test_dataset = GraphData(datareader, None, 'test')
+        in_features = train_dataset.num_features
+        out_features = train_dataset.num_classes
+        pool = args.pool
+        kl_weight = args.kl_weight
+    elif args.pool[1] in ['sup', 'unsup']:
+        datareader = DataReader(data_dir=args.data_dir, N_nodes=args.n_nodes, rnd_state=rnd, folds=cv_folds)
+        def set_pool(pool_thresh):
+            pool = copy.deepcopy(args.pool)
+            for i, s in enumerate(pool):
+                try:
+                    thresh = float(s)
+                    pool[i] = str(pool_thresh)
+                except:
+                    continue
+            return pool
+
+        val_acc = []
+        pool_thresh_values = np.array([1e-4, 1e-3, 2e-3, 5e-3, 1e-2, 3e-2, 5e-2, 1e-1])
+        if args.pool[1] == 'sup':
+            kl_weight_values = np.array([0.1, 0.5, 1, 2, 10, 100])
+        else:
+            kl_weight_values = np.array([100])  # any value (ignored for unsupervised training)
+
+        for pool_thresh in pool_thresh_values:
+            for kl_weight in kl_weight_values:
+                val_acc.append(
+                    cross_validation(datareader, args, collate_fn, loss_fn, set_pool(pool_thresh), kl_weight, None,
+                                     folds=cv_folds))
+        val_acc = np.array(val_acc).reshape(len(pool_thresh_values), len(kl_weight_values))
+        ind1, ind2 = np.where(val_acc == np.max(val_acc))  # np.argmax returns only first occurrence
+        print(val_acc)
+        print(ind1, ind2, pool_thresh_values[ind1], kl_weight_values[ind2], val_acc[ind1[0], ind2[0]])
+        pool = set_pool(pool_thresh_values[ind1[0]])
+        kl_weight = kl_weight_values[ind2[0]]
+
+        train_dataset = GraphData(datareader, None, 'train_val')
+        test_dataset = GraphData(datareader, None, 'test')
+        in_features = train_dataset.num_features
+        out_features = train_dataset.num_classes
+
+        if args.pool[1] == 'sup':
+            # Train a model with global pooling first
+            train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.threads,
+                                      collate_fn=collate_fn)
+            train_loader_test = DataLoader(train_dataset, batch_size=args.test_batch_size, shuffle=False,
+                                           num_workers=args.threads, collate_fn=collate_fn)
+
+            start_epoch, model, optimizer, scheduler = create_model_optimizer(in_features, out_features, None, kl_weight,
+                                                                              args)
+            for epoch in range(start_epoch, args.epochs + 1):
+                scheduler.step()
+                train_loss, acc = train(model, train_loader, optimizer, epoch, args, loss_fn, None)
+            train_loss, train_acc, attn_WS = test(model, train_loader_test, epoch, loss_fn, 'train', args, None,
+                                                  eval_attn=True)
+            train_dataset = GraphData(datareader, None, 'train_val', attn_labels=attn_WS)
+
+    return train_dataset, test_dataset, loss_fn, collate_fn, in_features, out_features, pool, kl_weight
 
 
-def load_checkpoint(model, optimizer, scheduler, file_path):
-    print('loading the model from %s' % file_path)
-    state = torch.load(file_path)
-    model.load_state_dict(state['state_dict'])
-    optimizer.load_state_dict(state['optimizer'])
-    scheduler.load_state_dict(state['scheduler'])
-    print('loading from epoch %d done' % state['epoch'])
-    return state['epoch'] + 1  # +1 because we already finished training for this epoch
-
-
-def create_model_optimizer(in_features, out_features, args):
-    model = ChebyGIN(in_features=in_features,
-                     out_features=out_features,
-                     filters=args.filters,
-                     K=args.filter_scale,
-                     n_hidden=args.n_hidden,
-                     aggregation=args.aggregation,
-                     dropout=args.dropout,
-                     readout=args.readout,
-                     pool=args.pool,
-                     pool_arch=args.pool_arch,
-                     kl_weight=args.kl_weight,
-                     debug=args.debug)
-    print(model)
-    # Compute the total number of trainable parameters
-    print('model capacity: %d' %
-          np.sum([np.prod(p.size()) if p.requires_grad else 0 for p in model.parameters()]))
-
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wdecay, betas=(0.5, 0.999))
-    scheduler = lr_scheduler.MultiStepLR(optimizer, args.lr_decay_step, gamma=0.1)
-    epoch = 1
-    if args.resume not in [None, 'None']:
-        epoch = load_checkpoint(model, optimizer, scheduler, args.resume)
-        if epoch < args.epochs + 1:
-            print('resuming training for epoch %d' % epoch)
-
-    model.to(args.device)
-
-    return epoch, model, optimizer, scheduler
+def set_seed(seed):
+    rnd = np.random.RandomState(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = True
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    return rnd
 
 
 if __name__ == '__main__':
@@ -300,105 +232,40 @@ if __name__ == '__main__':
     if args.results not in [None, 'None'] and not os.path.isdir(args.results):
         os.mkdir(args.results)
 
-    rnd = np.random.RandomState(args.seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = True
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
+    rnd = set_seed(args.seed)
 
+    pool = args.pool
+    kl_weight = args.kl_weight
     if args.dataset.find('colors') >= 0 or args.dataset == 'triangles':
-        train_dataset = SyntheticGraphs(args.data_dir, args.dataset, 'train')
-        test_dataset = SyntheticGraphs(args.data_dir, args.dataset, 'val' if args.validation else 'test')
-        loss_fn = mse_loss
-        collate_fn = collate_batch
-        in_features = train_dataset.feature_dim
-        out_features = 1
+        train_dataset, test_dataset, loss_fn, collate_fn, in_features, out_features = load_synthetic(args)
     elif args.dataset in ['mnist', 'mnist-75sp']:
-        use_mean_px = 'mean' in args.img_features
-        use_coord = 'coord' in args.img_features
-        assert use_mean_px, ('this mode is not well supported', use_mean_px)
-        gt_attn_threshold = 0 if (args.pool is not None and args.pool[1] in ['gt'] and args.filter_scale > 1) else 0.5
-        if args.dataset == 'mnist':
-            train_dataset = MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor(), attn_coef=args.alpha_ws)
-        else:
-            train_dataset = MNIST75sp(args.data_dir, split='train', use_mean_px=use_mean_px, use_coord=use_coord,
-                                      gt_attn_threshold=gt_attn_threshold, attn_coef=args.alpha_ws)
-
-        if args.validation:
-            n_val = 5000
-            if args.dataset == 'mnist':
-                train_dataset.train_data = train_dataset.train_data[:-n_val]
-                train_dataset.train_labels = train_dataset.train_labels[:-n_val]
-                test_dataset = MNIST(args.data_dir, train=True, download=True, transform=transforms.ToTensor())
-                test_dataset.train_data = train_dataset.train_data[-n_val:]
-                test_dataset.train_labels = train_dataset.train_labels[-n_val:]
-            else:
-                train_dataset.train_val_split(np.arange(0, train_dataset.n_samples - n_val))
-                test_dataset = MNIST75sp(args.data_dir, split='train', use_mean_px=use_mean_px, use_coord=use_coord, gt_attn_threshold=gt_attn_threshold)
-                test_dataset.train_val_split(np.arange(train_dataset.n_samples - n_val, train_dataset.n_samples))
-        else:
-            noise_file = pjoin(args.data_dir, '%s_noise.pt' % args.dataset.replace('-', '_'))
-            color_noise_file = pjoin(args.data_dir, '%s_color_noise.pt' % args.dataset.replace('-', '_'))
-            if args.dataset == 'mnist':
-                test_dataset = MNIST(args.data_dir, train=False, download=True, transform=transforms.ToTensor())
-                noise_shape = (len(test_dataset.test_labels), 28 * 28)
-            else:
-                test_dataset = MNIST75sp(args.data_dir, split='test', use_mean_px=use_mean_px, use_coord=use_coord, gt_attn_threshold=gt_attn_threshold)
-                noise_shape = (len(test_dataset.labels), 75)
-
-            # Generate/load noise (save it to make reproducible)
-            noises = load_save_noise(noise_file, noise_shape)
-            color_noises = load_save_noise(color_noise_file, (*(noise_shape), 3))
-
-        if args.dataset == 'mnist':
-            A, coord, mask = precompute_graph_images(train_dataset.train_data.shape[1])
-            collate_fn = lambda batch: collate_batch_images(batch, A, mask, use_mean_px=use_mean_px,
-                                                            coord=coord if use_coord else None,
-                                                            gt_attn_threshold=gt_attn_threshold)
-        else:
-            train_dataset.precompute_graph_images()
-            test_dataset.precompute_graph_images()
-            collate_fn = collate_batch
-
-        loss_fn = F.cross_entropy
-
-        in_features = 2
-        for features in args.img_features:
-            if features == 'mean':
-                in_features += 1
-            elif features == 'coord':
-                in_features += 2
-            else:
-                raise NotImplementedError(features)
-        in_features = np.max((in_features, 1))  # in_features=1 if neither mean nor coord are used  (dummy features will be used in this case)
-        out_features = 10
+        train_dataset, test_dataset, loss_fn, collate_fn, in_features, out_features, noises, color_noises = load_mnist(args)
     else:
-        datareader = DataReader(data_dir=args.data_dir, N_nodes=args.n_nodes, rnd_state=rnd, folds=10)
+        train_dataset, test_dataset, loss_fn, collate_fn, in_features, out_features, pool, kl_weight = load_TU(args, cv_folds=args.cv_folds)
 
-        raise NotImplementedError(args.dataset)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.threads, collate_fn=collate_fn)
     # A loader to test and evaluate attn on the training set (shouldn't be shuffled and have larger batch size multiple of 50)
     train_loader_test = DataLoader(train_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
 
-    start_epoch, model, optimizer, scheduler = create_model_optimizer(in_features, out_features, args)
+    start_epoch, model, optimizer, scheduler = create_model_optimizer(in_features, out_features, pool, kl_weight, args)
 
     feature_stats = None
     if args.dataset in ['mnist', 'mnist-75sp']:
         feature_stats = compute_feature_stats(model, train_loader, args.device, n_batches=1000)
-    # print(pjoin(args.results, '%s_alpha_WS_%s_seed%d_%s.pkl' % (args.dataset, 'train', args.seed, 'orig')))
+
     # Test function wrapper
     def test_fn(loader, epoch, split, eval_attn):
         # eval_attn = (epoch == args.epochs) and args.eval_attn_test
-        test(model, loader, epoch, loss_fn, split, args, feature_stats,
-             noises=None, img_noise_level=None, eval_attn=eval_attn, alpha_WS_name='orig')
+        test_loss, acc, _ = test(model, loader, epoch, loss_fn, split, args, feature_stats,
+                               noises=None, img_noise_level=None, eval_attn=eval_attn, alpha_WS_name='orig')
         if args.dataset in ['mnist', 'mnist-75sp'] and split == 'test':
             test(model, loader, epoch, loss_fn, split, args, feature_stats,
                  noises=noises, img_noise_level=args.img_noise_levels[0], eval_attn=eval_attn, alpha_WS_name='noisy')
             test(model, loader, epoch, loss_fn, split, args, feature_stats,
                  noises=color_noises, img_noise_level=args.img_noise_levels[1], eval_attn=eval_attn, alpha_WS_name='noisy-c')
+        return test_loss, acc
 
     if start_epoch > args.epochs:
         print('evaluating the model')
@@ -407,7 +274,8 @@ if __name__ == '__main__':
         for epoch in range(start_epoch, args.epochs + 1):
             eval_epoch = epoch <= 1 or epoch == args.epochs  # check for epoch == 1 just to make sure that the test function works fine for this test set before training all the way until the last epoch
             scheduler.step()
-            # train_loss, acc = test_fn(train_loader_test, epoch, 'train', None, None, True, 'orig')
+            # test_fn(train_loader_test, epoch, 'train', True)
+            # test_fn(test_loader, epoch, 'test', True)
             train_loss, acc = train(model, train_loader, optimizer, epoch, args, loss_fn, feature_stats)
             if eval_epoch:
                 save_checkpoint(model, scheduler, optimizer, args, epoch)
@@ -420,15 +288,3 @@ if __name__ == '__main__':
                 test_fn(test_loader, epoch, 'test', (epoch == args.epochs) and args.eval_attn_test)
 
     print('done in {}'.format(datetime.datetime.now() - dt))
-
-
-def cross_validation(datareader, model_fn, args, folds=10):
-    for fold in range(folds):
-        train_dataset = GraphData(datareader, fold, 'train')
-        val_dataset = GraphData(datareader, fold, 'val')
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.threads, collate_fn=collate_fn)
-        # A loader to test and evaluate attn on the training set (shouldn't be shuffled and have larger batch size multiple of 50)
-        train_loader_val = DataLoader(train_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
-        val_loader = DataLoader(val_dataset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.threads, collate_fn=collate_fn)
-
-        model = model_fn()

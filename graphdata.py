@@ -321,9 +321,20 @@ class GraphData(torch.utils.data.Dataset):
     def __init__(self,
                  datareader,
                  fold_id,
-                 split):  # train, val, train_val, test
+                 split,  # train, val, train_val, test
+                 attn_labels=None):
         self.fold_id = fold_id
         self.split = split
+
+        self.w_sup_signal_attn = None
+        if attn_labels is not None:
+            if isinstance(attn_labels, str) and os.path.isfile(attn_labels):
+                with open(attn_labels, 'rb') as f:
+                    self.w_sup_signal_attn = pickle.load(f)
+            else:
+                self.w_sup_signal_attn = attn_labels
+            print(('!!!using weakly supervised labels (%d samples)!!!' % len(self.w_sup_signal_attn)).upper())
+
         self.set_fold(datareader.data, fold_id)
 
     def set_fold(self, data, fold_id):
@@ -348,10 +359,16 @@ class GraphData(torch.utils.data.Dataset):
         return len(self.labels)
 
     def __getitem__(self, index):
-        # convert to torch
-        return [torch.from_numpy(self.features_onehot[index]).float(),  # node_features
-                torch.from_numpy(self.adj_list[index]).float(),  # adjacency matrix
-                int(self.labels[index])]
+        data = [self.features_onehot[index],
+                self.adj_list[index],
+                self.adj_list[index].shape[0],
+                self.labels[index]]
+        if self.w_sup_signal_attn is not None:
+            # print(self.w_sup_signal_attn[index].shape, self.adj_list[index].shape, self.w_sup_signal_attn[index].sum())
+            data += [self.w_sup_signal_attn[index]]
+        data = list_to_torch(data)  # convert to torch
+
+        return data
 
 
 class DataReader():
@@ -375,8 +392,11 @@ class DataReader():
         data = {}
         nodes, graphs = self.read_graph_nodes_relations(
             list(filter(lambda f: f.find('graph_indicator') >= 0, files))[0])
-        data['features'] = self.read_node_features(list(filter(lambda f: f.find('node_labels') >= 0, files))[0],
-                                                   nodes, graphs, fn=lambda s: int(s.strip()))
+        lst = list(filter(lambda f: f.find('node_labels') >= 0, files))
+        if len(lst) > 0:
+            data['features'] = self.read_node_features(lst[0], nodes, graphs, fn=lambda s: int(s.strip()))
+        else:
+            data['features'] = None
         data['adj_list'] = self.read_graph_adj(list(filter(lambda f: f.find('_A') >= 0, files))[0], nodes, graphs)
         data['targets'] = np.array(
             self.parse_txt_file(list(filter(lambda f: f.find('graph_labels') >= 0, files))[0],
@@ -393,29 +413,41 @@ class DataReader():
             if data['features'] is not None:
                 assert N == len(data['features'][sample_id]), (N, len(data['features'][sample_id]))
             n = np.sum(adj)  # total sum of edges
-            assert n % 2 == 0, n
+            # assert n % 2 == 0, n
             n_edges.append(int(n / 2))  # undirected edges, so need to divide by 2
             if not np.allclose(adj, adj.T):
                 print(sample_id, 'not symmetric')
             degrees.extend(list(np.sum(adj, 1)))
-            features.append(np.array(data['features'][sample_id]))
+            if data['features'] is not None:
+                features.append(np.array(data['features'][sample_id]))
 
         # Create features over graphs as one-hot vectors for each node
-        features_all = np.concatenate(features)
-        features_min = features_all.min()
-        num_features = int(features_all.max() - features_min + 1)  # number of possible values
+        if data['features'] is not None:
+            features_all = np.concatenate(features)
+            features_min = features_all.min()
+            num_features = int(features_all.max() - features_min + 1)  # number of possible values
 
-        features_onehot = []
-        for i, x in enumerate(features):
-            feature_onehot = np.zeros((len(x), num_features))
-            for node, value in enumerate(x):
-                feature_onehot[node, value - features_min] = 1
+            features_onehot = []
+            for i, x in enumerate(features):
+                feature_onehot = np.zeros((len(x), num_features))
+                for node, value in enumerate(x):
+                    feature_onehot[node, value - features_min] = 1
+                if self.use_cont_node_attr:
+                    feature_onehot = np.concatenate((feature_onehot, np.array(data['attr'][i])), axis=1)
+                features_onehot.append(feature_onehot)
+
             if self.use_cont_node_attr:
-                feature_onehot = np.concatenate((feature_onehot, np.array(data['attr'][i])), axis=1)
-            features_onehot.append(feature_onehot)
-
-        if self.use_cont_node_attr:
-            num_features = features_onehot[0].shape[1]
+                num_features = features_onehot[0].shape[1]
+        else:
+            degree_max = int(np.max([np.sum(A, 1).max() for A in data['adj_list']]))
+            num_features = degree_max + 1
+            features_onehot = []
+            for A in data['adj_list']:
+                N_nodes = A.shape[0]
+                D = np.sum(A, 1).astype(np.int)
+                D_onehot = np.zeros((N_nodes, num_features))
+                D_onehot[np.arange(N_nodes), D] = 1
+                features_onehot.append(D_onehot)
 
         shapes = [len(adj) for adj in data['adj_list']]
         labels = data['targets']  # graph class labels
@@ -445,8 +477,9 @@ class DataReader():
         for lbl in classes:
             print('Class %d: \t\t\t%d samples' % (lbl, np.sum(labels == lbl)))
 
-        for u in np.unique(features_all):
-            print('feature {}, count {}/{}'.format(u, np.count_nonzero(features_all == u), len(features_all)))
+        if data['features'] is not None:
+            for u in np.unique(features_all):
+                print('feature {}, count {}/{}'.format(u, np.count_nonzero(features_all == u), len(features_all)))
 
         N_graphs = len(labels)  # number of samples (graphs) in data
         assert N_graphs == len(data['adj_list']) == len(features_onehot), 'invalid data'
@@ -460,7 +493,7 @@ class DataReader():
         splits = {'train': [], 'val': [], 'train_val': train_val_ids, 'test': test_ids}
         for fold in range(folds):
             splits['train'].append(train_ids[fold])
-            splits['val'].append(train_ids[fold])
+            splits['val'].append(val_ids[fold])
 
         data['features_onehot'] = features_onehot
         data['targets'] = labels
@@ -486,11 +519,16 @@ class DataReader():
 
         assert np.all(
             np.unique(np.concatenate((train_val_ids, test_ids))) == sorted(ids_all)), 'some graphs are missing in the test sets'
-        train_ids, val_ids = self.split_ids(train_val_ids, folds=folds)
-        # Sanity checks
-        for fold in range(folds):
-            ind = np.concatenate((train_ids[fold], val_ids[fold]))
-            assert len(train_ids[fold]) + len(val_ids[fold]) == len(np.unique(ind)) == len(ind) == len(train_val_ids), 'invalid splits'
+        if folds > 0:
+            print('generating %d-fold cross-validation splits' % folds)
+            train_ids, val_ids = self.split_ids(train_val_ids, folds=folds)
+            # Sanity checks
+            for fold in range(folds):
+                ind = np.concatenate((train_ids[fold], val_ids[fold]))
+                print(fold, len(train_ids[fold]), len(val_ids[fold]))
+                assert len(train_ids[fold]) + len(val_ids[fold]) == len(np.unique(ind)) == len(ind) == len(train_val_ids), 'invalid splits'
+        else:
+            train_ids, val_ids = [], []
 
         return train_ids, val_ids, train_val_ids, test_ids
 

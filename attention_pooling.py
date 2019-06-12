@@ -11,12 +11,14 @@ class AttentionPooling(nn.Module):
                  in_features_prev,  # feature dimensionality in the previous graph layer
                  pool_type,
                  pool_arch,
+                 large_graph,
                  kl_weight=None,
                  drop_nodes=True,
                  debug=False):
         super(AttentionPooling, self).__init__()
         self.pool_type = pool_type
         self.pool_arch = pool_arch
+        self.large_graph = large_graph
         self.kl_weight = kl_weight
         self.proj = None
         self.drop_nodes = drop_nodes
@@ -39,6 +41,7 @@ class AttentionPooling(nn.Module):
                     # single layer projection
                     self.proj = nn.Linear(n_in, 1, bias=False)
                     self.proj.weight.data = torch.randn(n_in).view_as(self.proj.weight.data)  # torch.from_numpy(np.array([-1, 1, -1, 0]).astype(np.float32)).view(1, n_in)
+                    # self.proj.weight.data[0, -1] = 0
                     p = self.proj.weight.data.view(1, n_in)
                 else:
                     # multi-layer projection
@@ -104,7 +107,7 @@ class AttentionPooling(nn.Module):
         mask_float = mask.float()
         N_nodes_float = params_dict['N_nodes'].float()
         B, N, C = x.shape
-        if self.pool_type[1] in ['gt', 'sup']:
+        if self.pool_type[1] == 'gt' or (self.pool_type[1] == 'sup' and self.training):
             if 'node_attn' in params_dict:
                 alpha_gt = params_dict['node_attn'].view(B, N)
             else:
@@ -116,14 +119,15 @@ class AttentionPooling(nn.Module):
             # softmax with masking out dummy nodes
             alpha = self.mask_out(torch.exp(alpha_pre), mask_float).view(B, N)
             alpha = alpha / (torch.sum(alpha, dim=1, keepdim=True) + 1e-7)
-            if self.pool_type[1] == 'sup':
+            if self.pool_type[1] == 'sup' and self.training:
                 KL_loss_per_node = self.mask_out(F.kl_div(torch.log(alpha + 1e-14), alpha_gt, reduction='none'), mask_float)  # per node loss
                 KL_loss = self.kl_weight * torch.mean(KL_loss_per_node.sum(dim=1) / (N_nodes_float + 1e-7))  # mean over nodes, then mean over batches
         else:
             alpha = alpha_gt
 
         x = x * alpha.view(B, N, 1)
-        if N > 700:
+        if self.large_graph:
+            # For large graphs during training, all alpha values can be very small hindering training
             x = x * N_nodes_float.view(B, 1, 1)
         if self.is_topk:
             N_remove = torch.round(N_nodes_float * (1 - self.topk_ratio)).long()  # number of nodes to be removed for each graph

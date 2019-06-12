@@ -159,6 +159,7 @@ class ChebyGIN(nn.Module):
                  readout='max',
                  pool='attn_gt_threshold_0_skip_skip'.split('_'),
                  pool_arch='fc_prev'.split('_'),
+                 large_graph=False,
                  kl_weight=None,
                  debug=False):
         super(ChebyGIN, self).__init__()
@@ -174,7 +175,9 @@ class ChebyGIN(nn.Module):
             if self.pool is not None and len(self.pool) > len(filters) + layer and self.pool[layer + 3] != 'skip':
                 layers.append(AttentionPooling(in_features=n_in, in_features_prev=n_prev,
                                                pool_type=self.pool[:3] + [self.pool[layer + 3]],
-                                               pool_arch=self.pool_arch, kl_weight=kl_weight, debug=debug))
+                                               pool_arch=self.pool_arch,
+                                               large_graph=large_graph,
+                                               kl_weight=kl_weight, debug=debug))
 
             # Graph convolution layers
             layers.append(ChebyGINLayer(in_features=n_in,

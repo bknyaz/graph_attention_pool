@@ -40,8 +40,7 @@ class AttentionPooling(nn.Module):
                 if len(self.pool_arch) == 2:
                     # single layer projection
                     self.proj = nn.Linear(n_in, 1, bias=False)
-                    self.proj.weight.data = torch.randn(n_in).view_as(self.proj.weight.data)  # torch.from_numpy(np.array([-1, 1, -1, 0]).astype(np.float32)).view(1, n_in)
-                    # self.proj.weight.data[0, -1] = 0
+                    self.proj.weight.data = torch.randn(n_in).view_as(self.proj.weight.data)  # seed 9753 for optimal initialization
                     p = self.proj.weight.data.view(1, n_in)
                 else:
                     # multi-layer projection
@@ -75,10 +74,11 @@ class AttentionPooling(nn.Module):
             raise NotImplementedError(self.pool_type[1])
 
     def __repr__(self):
-        return 'AttentionPooling(pool_type={}, pool_arch={}, topk={}, proj={})'.format(self.pool_type,
-                                                                                       self.pool_arch,
-                                                                                       self.is_topk,
-                                                                                       self.proj)
+        return 'AttentionPooling(pool_type={}, pool_arch={}, topk={}, kl_weight={}, proj={})'.format(self.pool_type,
+                                                                                                     self.pool_arch,
+                                                                                                     self.is_topk,
+                                                                                                     self.kl_weight,
+                                                                                                     self.proj)
 
     def cosine_sim(self, a, b):
         return torch.mm(a, b.t()) / (torch.norm(a, dim=1, keepdim=True) * torch.norm(b, dim=1, keepdim=True))
@@ -132,9 +132,9 @@ class AttentionPooling(nn.Module):
         if self.is_topk:
             N_remove = torch.round(N_nodes_float * (1 - self.topk_ratio)).long()  # number of nodes to be removed for each graph
             idx = torch.sort(alpha, dim=1, descending=False)[1]  # indices of alpha in ascending order
-            mask = mask.clone()
+            mask = mask.clone().view(B, N)
             for b in range(B):
-                idx_b = idx[b, mask[b, idx[b]] > 0]  # take indices of non-dummy nodes for current data example
+                idx_b = idx[b, mask[b, idx[b]]]  # take indices of non-dummy nodes for current data example
                 mask[b, idx_b[:N_remove[b]]] = 0
         else:
             mask = (mask & (alpha.view_as(mask) > self.threshold)).view(B, N)

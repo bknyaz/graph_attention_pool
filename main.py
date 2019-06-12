@@ -144,9 +144,7 @@ def load_mnist(args):
 def load_TU(args, cv_folds=5):
     loss_fn = F.cross_entropy
     collate_fn = collate_batch
-    if args.pool[1] == 'gt':
-        raise ValueError('ground truth attention for TU datasets is not available')
-    elif args.pool in [None, 'None']:
+    if args.pool is None:
         # Global pooling models
         datareader = DataReader(data_dir=args.data_dir, N_nodes=args.n_nodes, rnd_state=rnd, folds=0)
         train_dataset = GraphData(datareader, None, 'train_val')
@@ -155,6 +153,8 @@ def load_TU(args, cv_folds=5):
         out_features = train_dataset.num_classes
         pool = args.pool
         kl_weight = args.kl_weight
+    elif args.pool[1] == 'gt':
+        raise ValueError('ground truth attention for TU datasets is not available')
     elif args.pool[1] in ['sup', 'unsup']:
         datareader = DataReader(data_dir=args.data_dir, N_nodes=args.n_nodes, rnd_state=rnd, folds=cv_folds)
         def set_pool(pool_thresh):

@@ -443,10 +443,10 @@ class DataReader():
             num_features = degree_max + 1
             features_onehot = []
             for A in data['adj_list']:
-                N_nodes = A.shape[0]
+                n = A.shape[0]
                 D = np.sum(A, 1).astype(np.int)
-                D_onehot = np.zeros((N_nodes, num_features))
-                D_onehot[np.arange(N_nodes), D] = 1
+                D_onehot = np.zeros((n, num_features))
+                D_onehot[np.arange(n), D] = 1
                 features_onehot.append(D_onehot)
 
         shapes = [len(adj) for adj in data['adj_list']]

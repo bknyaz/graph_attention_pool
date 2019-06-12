@@ -83,7 +83,6 @@ See [mnist_wsup.sh](mnist_wsup.sh) for an example of training models with differ
 
 ### COLLAB, PROTEINS, D&D
 
-
 Weakly supervised experiments on PROTEINS:
 
 ```for i in $(seq 1 1 10); do seed=$(( ( RANDOM % 10000 )  + 1 )); python main.py --seed $seed -D TU --n_nodes 25 --epochs 50 --lr_decay_step 25,35,45 --test_batch_size 100 -f 64,64,64 -K 3 --aggregation mean --n_hidden 0 --readout max --dropout 0.1 --pool attn_sup_threshold_skip_skip_0 --pool_arch fc_prev --results ./results --data_dir ./data/PROTEINS | tee logs/proteins_wsup_5fold_cv_seed"$seed".log; done```

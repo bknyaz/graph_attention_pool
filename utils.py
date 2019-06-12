@@ -86,9 +86,13 @@ def attn_AUC(alpha_GT, alpha):
     auc = []
     if len(alpha) > 0 and alpha_GT is not None and len(alpha_GT) > 0:
         alpha_GT = np.concatenate([a.flatten() for a in alpha_GT]) > 0
-        # print('attn for total %d nodes' % len(alpha_GT))
-        for layer in alpha:
-            auc.append(100 * roc_auc_score(y_true=alpha_GT, y_score=np.concatenate([a.flatten() for a in alpha[layer]])))
+        if len(np.unique(alpha_GT)) <= 1:
+            print('Only one class present in y_true. ROC AUC score is not defined in that case.')
+            for layer in alpha:
+                auc.append(np.nan)
+        else:
+            for layer in alpha:
+                auc.append(100 * roc_auc_score(y_true=alpha_GT, y_score=np.concatenate([a.flatten() for a in alpha[layer]])))
     return auc
 
 

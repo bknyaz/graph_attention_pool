@@ -61,11 +61,16 @@ Hyperparameters should be tuned with the ```--validation``` flag.
 
 To run 100 jobs with random seed for the GIN model with unsupervised attention:
 
-```for i in $(seq 1 1 100); do seed=$(( ( RANDOM % 10000 )  + 1 )); python main.py -D colors-3 --epochs 300 --lr_decay_step 280 --test_batch_size 100 -f 64,64 -K 1 --aggregation sum --n_hidden 0 --readout sum  --dropout 0 --pool attn_unsup_threshold_skip_0.03 --pool_arch fc_prev --seed $seed --results None | tee results/colors/seed"$seed".log; done```
+```for i in $(seq 1 1 100); do seed=$(( ( RANDOM % 10000 )  + 1 )); python main.py -D colors-3 --epochs 300 --lr_decay_step 280 --test_batch_size 100 -f 64,64 -K 1 --aggregation sum --n_hidden 256 --readout sum  --dropout 0 --pool attn_unsup_threshold_skip_0.03 --pool_arch fc_prev --seed $seed --results None | tee results/colors/seed"$seed".log; done```
 
 See [plot_results.ipynb](plot_results.ipynb) for the example how to visualize results similarly to Figures in the paper.
 
+To run longer training:
+
+
 ### TRIANGLES
+
+python main.py -D triangles --epochs 100 --lr_decay_step 85,95 --test_batch_size 100 -f 64,64,64 -K 7 --aggregation sum --n_hidden 64 --readout max  --dropout 0 --pool attn_sup_threshold_skip_0.01_0.01 --pool_arch gnn_prev  --results None -d /scratch/ssd/bknyazev/data/random/ --batch_size 32
 
 ### MNIST
 
@@ -86,6 +91,10 @@ See [mnist_wsup.sh](mnist_wsup.sh) for an example of training models with differ
 Weakly supervised experiments on PROTEINS:
 
 ```for i in $(seq 1 1 10); do seed=$(( ( RANDOM % 10000 )  + 1 )); python main.py --seed $seed -D TU --n_nodes 25 --epochs 50 --lr_decay_step 25,35,45 --test_batch_size 100 -f 64,64,64 -K 3 --aggregation mean --n_hidden 0 --readout max --dropout 0.1 --pool attn_sup_threshold_skip_skip_0 --pool_arch fc_prev --results ./results --data_dir ./data/PROTEINS | tee logs/proteins_wsup_5fold_cv_seed"$seed".log; done```
+
+DD:
+
+for folds in 10; do for n_nodes in 200; do for i in $(seq 1 1 10); do seed=$(( ( RANDOM % 10000 )  + 1 )); python main.py --seed $seed -D TU --cv_folds $folds --n_nodes $n_nodes --epochs 50 --lr_decay_step 25,35,45 --test_batch_size 10 -f 64,64,64 -K 3 --aggregation mean --n_hidden 0 --readout max --dropout 0.1 --pool attn_unsup_threshold_skip_skip_0 --pool_arch fc_prev_32 --results /mnt/data/bknyazev/checkpoints/ --data_dir /mnt/data/bknyazev/data/graph_data/DD | tee results/dd_unsup_"$n_nodes"nodes_"$folds"fold_fc32/dd_seed"$seed".log;  done; done; done
 
 # Reference
 

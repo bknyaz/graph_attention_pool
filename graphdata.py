@@ -350,10 +350,13 @@ class GraphData(torch.utils.data.Dataset):
             self.idx = data['splits'][self.split]
 
         # use deepcopy to make sure we don't alter objects in folds
-        self.labels = copy.deepcopy([data['targets'][i] for i in self.idx])
+        self.labels = np.array(copy.deepcopy([data['targets'][i] for i in self.idx]))
         self.adj_list = copy.deepcopy([data['adj_list'][i] for i in self.idx])
         self.features_onehot = copy.deepcopy([data['features_onehot'][i] for i in self.idx])
         print('%s: %d/%d' % (self.split.upper(), len(self.labels), len(data['targets'])))
+        classes = np.unique(self.labels)
+        for lbl in classes:
+            print('Class %d: \t\t\t%d samples' % (lbl, np.sum(self.labels == lbl)))
 
     def __len__(self):
         return len(self.labels)

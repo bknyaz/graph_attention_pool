@@ -85,15 +85,24 @@ def count_correct(output, target, N_nodes=None, N_nodes_min=0, N_nodes_max=25):
 def attn_AUC(alpha_GT, alpha):
     auc = []
     if len(alpha) > 0 and alpha_GT is not None and len(alpha_GT) > 0:
-        alpha_GT = np.concatenate([a.flatten() for a in alpha_GT]) > 0
-        if len(np.unique(alpha_GT)) <= 1:
-            print('Only one class present in y_true. ROC AUC score is not defined in that case.')
-            for layer in alpha:
+        # alpha_GT = np.concatenate([a.flatten() for a in alpha_GT]) > 0
+        for layer in alpha:
+            alpha_gt = np.concatenate([a.flatten() for a in alpha_GT[layer]]) > 0
+            if len(np.unique(alpha_gt)) <= 1:
+                print('Only one class present in y_true. ROC AUC score is not defined in that case.')
                 auc.append(np.nan)
-        else:
-            for layer in alpha:
-                auc.append(100 * roc_auc_score(y_true=alpha_GT, y_score=np.concatenate([a.flatten() for a in alpha[layer]])))
+            else:
+                auc.append(100 * roc_auc_score(y_true=alpha_gt,
+                                               y_score=np.concatenate([a.flatten() for a in alpha[layer]])))
     return auc
+
+
+def stats(arr):
+    return np.mean(arr), np.std(arr), np.min(arr), np.max(arr)
+
+
+def normalize_batch(x, dim=1, eps=1e-7):
+    return x / (x.sum(dim=dim, keepdim=True) + eps)
 
 
 def mse_loss(target, output, reduction='mean'):

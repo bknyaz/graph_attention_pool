@@ -31,9 +31,13 @@ def parse_args():
     parser.add_argument('--kl_weight', type=float, default=100, help='weight of the KL term in the loss')
     parser.add_argument('--pool', type=str, default=None, help='type of pooling between layers')
     parser.add_argument('--pool_arch', type=str, default=None, help='pooling layers architecture')
-    parser.add_argument('--img_features', type=str, default='mean,coord', help='which image features to use as node features')
+    # TU datasets arguments
     parser.add_argument('--n_nodes', type=int, default=25, help='maximum number of nodes in the training set for collab, proteins and dd')
     parser.add_argument('--cv_folds', type=int, default=5, help='number of folds for cross-validating hyperparameters for collab, proteins and dd')
+    # Image datasets arguments
+    parser.add_argument('--img_features', type=str, default='mean,coord', help='image features to use as node features')
+    parser.add_argument('--img_noise_levels', type=str, default='0.4,0.6',
+                        help='Gaussian noise standard deviations for grayscale and color image features')
     # Auxiliary arguments
     parser.add_argument('--validation', action='store_true', default=False, help='run in the validation mode')
     parser.add_argument('--debug', action='store_true', default=False, help='evaluate on the test set after each epoch (only for visualization purposes)')
@@ -41,10 +45,8 @@ def parse_args():
     parser.add_argument('--eval_attn_test', action='store_true', default=False, help='evaluate attention and save coefficients on the test set for models without learnable attention')
     parser.add_argument('--test_batch_size', type=int, default=100, help='batch size for test data')
     parser.add_argument('--alpha_ws', type=str, default=None, help='attention labels that will be used for (weak)supervision')
-    parser.add_argument('--img_noise_levels', type=str, default='0.75,1.25', help='Gaussian noise standard deviations for grayscale and color image features')
     parser.add_argument('--log_interval', type=int, default=400, help='print interval')
-    parser.add_argument('--results', type=str, default='./results',
-                        help='directory to save model checkpoints and other results, set to None to prevent saving anything')
+    parser.add_argument('--results', type=str, default='./results', help='directory to save model checkpoints and other results, set to None to prevent saving anything')
     parser.add_argument('--resume', type=str, default=None, help='checkpoint to load the model and optimzer states from and continue training')
     parser.add_argument('--device', type=str, default='cuda', choices=['cuda', 'cpu'], help='cuda/cpu')
     parser.add_argument('--seed', type=int, default=11, help='seed for shuffling nodes')

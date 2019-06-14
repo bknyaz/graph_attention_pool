@@ -7,11 +7,12 @@ from chebygin import *
 from utils import *
 from graphdata import *
 
+
 def train(model, train_loader, optimizer, epoch, args, loss_fn, feature_stats=None):
     model.train()
     optimizer.zero_grad()
     n_samples, correct, train_loss = 0, 0, 0
-    alpha_pred, alpha_GT = {}, []
+    alpha_pred, alpha_GT = {}, {}
     start = time.time()
 
     # with torch.autograd.set_detect_anomaly(True):
@@ -23,10 +24,11 @@ def train(model, train_loader, optimizer, epoch, args, loss_fn, feature_stats=No
             sanity_check(model.eval(), data)  # to disable the effect of dropout or other regularizers that can change behavior from batch to batch
             model.train()
         optimizer.zero_grad()
-        mask = data[2].view(len(data[2]), -1)
+        mask = [data[2].view(len(data[2]), -1)]
         output, other_outputs = model(data)
         other_losses = other_outputs['reg'] if 'reg' in other_outputs else []
         alpha = other_outputs['alpha'] if 'alpha' in other_outputs else []
+        mask.extend(other_outputs['mask'] if 'mask' in other_outputs else [])
         targets = data[3]
         loss = loss_fn(output, targets)
         for l in other_losses:
@@ -38,13 +40,7 @@ def train(model, train_loader, optimizer, epoch, args, loss_fn, feature_stats=No
         optimizer.step()  # update weights
         time_iter = time.time() - start
         correct += count_correct(output.detach(), targets.detach())
-        if 'node_attn' in data[4] and len(alpha) > 0:
-            alpha_GT.extend(masked_alpha(data[4]['node_attn'], mask))
-        for layer in range(len(alpha)):
-            if layer not in alpha_pred:
-                alpha_pred[layer] = []
-            alpha_pred[layer].extend(masked_alpha(alpha[layer], mask))
-
+        update_attn(data, alpha, alpha_pred, alpha_GT, mask)
         acc = 100. * correct / n_samples  # average over all examples in the dataset
         train_loss_avg  = train_loss / (batch_idx + 1)
 
@@ -66,7 +62,7 @@ def test(model, test_loader, epoch, loss_fn, split, args, feature_stats=None, no
     n_samples, correct, test_loss = 0, 0, 0
     pred, targets, N_nodes = [], [], []
     start = time.time()
-    alpha_pred, alpha_GT = {}, []
+    alpha_pred, alpha_GT = {}, {}
     if eval_attn:
         alpha_pred[0] = []
         print('testing with evaluation of attention: takes longer time')
@@ -87,10 +83,11 @@ def test(model, test_loader, epoch, loss_fn, split, args, feature_stats=None, no
                     noise = noise.unsqueeze(2)
                 data[0][:, :, :3] = data[0][:, :, :3] + noise
 
-            mask = data[2].view(len(data[2]), -1)
+            mask = [data[2].view(len(data[2]), -1)]
             output, other_outputs = model(data)
             other_losses = other_outputs['reg'] if 'reg' in other_outputs else []
             alpha = other_outputs['alpha'] if 'alpha' in other_outputs else []
+            mask.extend(other_outputs['mask'] if 'mask' in other_outputs else [])
             if args.debug:
                 for key in other_outputs:
                     if key.find('debug') >= 0:
@@ -104,16 +101,10 @@ def test(model, test_loader, epoch, loss_fn, split, args, feature_stats=None, no
             pred.append(output.detach())
             targets.append(data[3].detach())
             N_nodes.append(data[4]['N_nodes'])
-            if 'node_attn' in data[4] or 'node_attn_GT' in data[4]:
-                alpha_GT.extend(masked_alpha(data[4]['node_attn_GT' if 'node_attn_GT' in data[4] else 'node_attn'], mask))
+            update_attn(data, alpha, alpha_pred, alpha_GT, mask)
             if eval_attn:
                 assert len(alpha) == 0, ('invalid mode, eval_attn should be false')
                 alpha_pred[0].extend(attn_heatmaps(model, args.device, data, output.data, test_loader.batch_size, constant_mask=args.dataset=='mnist'))
-            else:
-                for layer in range(len(alpha)):
-                    if layer not in alpha_pred:
-                        alpha_pred[layer] = []
-                    alpha_pred[layer].extend(masked_alpha(alpha[layer], mask))
 
             n_samples += len(data[0])
             if eval_attn:
@@ -163,18 +154,40 @@ def test(model, test_loader, epoch, loss_fn, split, args, feature_stats=None, no
     return test_loss, acc, alpha_pred
 
 
+def update_attn(data, alpha, alpha_pred, alpha_GT, mask):
+    key = 'node_attn_GT' if 'node_attn_GT' in data[4] else 'node_attn'
+    for layer in range(len(mask)):
+        mask[layer] = mask[layer].data.cpu().numpy()
+
+    if key in data[4]:
+        for layer in range(len(data[4][key])):
+            if layer not in alpha_GT:
+                alpha_GT[layer] = []
+            alpha_GT[layer].extend(masked_alpha(data[4][key][layer].data.cpu().numpy(), mask[layer]))
+    for layer in range(len(alpha)):
+        if layer not in alpha_pred:
+            alpha_pred[layer] = []
+        alpha_pred[layer].extend(masked_alpha(alpha[layer].data.cpu().numpy(), mask[layer]))
+
+
 def masked_alpha(alpha, mask):
     alpha_lst = []
     for i in range(len(alpha)):
-        alpha_lst.append(alpha[i][mask[i]].data.cpu().numpy())
+        alpha_lst.append(alpha[i][mask[i]])
     return alpha_lst
 
 
 def attn_heatmaps(model, device, data, output_org, batch_size=1, constant_mask=False):
     labels = torch.argmax(output_org, dim=1)
     B, N_nodes_max, C  = data[0].shape  # N_nodes should be the same in the batch
-    mask_org = data[2].float()  # B,N_nodes
     alpha_WS = []
+    if N_nodes_max > 1000:
+        print('WARNING: graph is too large (%d nodes) and not supported by this function (evaluation will be incorrect for graphs in this batch).' % N_nodes_max)
+        for b in range(B):
+            n = data[2][b].sum().item()
+            alpha_WS.append(np.zeros((1, n)) + 1. / n)
+        return alpha_WS
+
     if constant_mask:
         mask = torch.ones(N_nodes_max, N_nodes_max - 1).to(device)
 
@@ -203,7 +216,6 @@ def attn_heatmaps(model, device, data, output_org, batch_size=1, constant_mask=F
             # print(alpha.shape, N_nodes[b], N_nodes_max)
             alpha_WS.append((alpha / (alpha.sum() + 1e-7)).data.cpu().numpy())
 
-    # alpha_WS = torch.cat(alpha_WS, dim=0)
     return alpha_WS
 
 

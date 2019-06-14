@@ -116,10 +116,6 @@ def collate_batch(batch):
     return [x, A, mask, labels, params_dict]
 
 
-def stats(arr):
-    return np.mean(arr), np.std(arr), np.min(arr), np.max(arr)
-
-
 class MNIST(torchvision.datasets.MNIST):
     '''
     Wrapper around MNIST to use predefined attention coefficients

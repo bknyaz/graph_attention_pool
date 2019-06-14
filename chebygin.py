@@ -152,50 +152,75 @@ class ChebyGIN(nn.Module):
                  in_features,
                  out_features,
                  filters,
-                 K,
+                 K=1,
                  n_hidden=0,
                  aggregation='mean',
                  dropout=0,
                  readout='max',
-                 pool='attn_gt_threshold_0_skip_skip'.split('_'),
+                 pool=None,  # Example: 'attn_gt_threshold_0_skip_skip'.split('_'),
                  pool_arch='fc_prev'.split('_'),
                  large_graph=False,
                  kl_weight=None,
+                 graph_layer_fn=None,
                  debug=False):
         super(ChebyGIN, self).__init__()
+        self.out_features = out_features
+        assert len(filters) > 0, 'filters must be an iterable object with at least one element'
+        assert K > 0, 'filter scale must be a positive integer'
         self.pool = pool
         self.pool_arch = pool_arch
         self.debug = debug
         n_prev = None
-        layers = []
+
+        attn_gnn = None
+        if graph_layer_fn is None:
+            graph_layer_fn = lambda n_in, n_out, K_, n_hidden_: ChebyGINLayer(in_features=n_in,
+                                                               out_features=n_out,
+                                                               K=K_,
+                                                               n_hidden=n_hidden_,
+                                                               aggregation=aggregation)
+            if self.pool_arch[0] == 'gnn':
+                attn_gnn = lambda n_in: ChebyGIN(in_features=n_in,
+                                                 out_features=0,
+                                                 filters=[32, 32, 1],
+                                                 K=np.min((K, 2)),
+                                                 n_hidden=0,
+                                                 graph_layer_fn=graph_layer_fn)
+
+        graph_layers = []
         for layer, f in enumerate(filters):
 
             n_in = in_features if layer == 0 else filters[layer - 1]
             # Pooling layers
+            # It's a non-standard way to put pooling before convolution, but it's important for our work
             if self.pool is not None and len(self.pool) > len(filters) + layer and self.pool[layer + 3] != 'skip':
-                layers.append(AttentionPooling(in_features=n_in, in_features_prev=n_prev,
-                                               pool_type=self.pool[:3] + [self.pool[layer + 3]],
-                                               pool_arch=self.pool_arch,
-                                               large_graph=large_graph,
-                                               kl_weight=kl_weight, debug=debug))
+                graph_layers.append(AttentionPooling(in_features=n_in, in_features_prev=n_prev,
+                                                     pool_type=self.pool[:3] + [self.pool[layer + 3]],
+                                                     pool_arch=self.pool_arch,
+                                                     large_graph=large_graph,
+                                                     kl_weight=kl_weight,
+                                                     attn_gnn=attn_gnn,
+                                                     debug=debug))
 
-            # Graph convolution layers
-            layers.append(ChebyGINLayer(in_features=n_in,
-                                                    out_features=f,
-                                                    K=K,
-                                                    n_hidden=n_hidden,
-                                                    aggregation=aggregation,
-                                                    activation=nn.ReLU(inplace=True)))
+            # Graph "convolution" layers
+            graph_layers.append(graph_layer_fn(n_in, f, K, n_hidden))
             n_prev = n_in
 
-        # Global pooling over nodes
-        layers.append(GraphReadout(readout))
-        self.layers = nn.Sequential(*layers)
 
-        # Fully connected (classification/regression) layers
-        self.fc = nn.Sequential(*(([nn.Dropout(p=dropout)] if dropout > 0 else []) + [nn.Linear(filters[-1], out_features)]))
+        if self.out_features > 0:
+            # Global pooling over nodes
+            graph_layers.append(GraphReadout(readout))
+        self.graph_layers = nn.Sequential(*graph_layers)
+
+        if self.out_features > 0:
+            # Fully connected (classification/regression) layers
+            self.fc = nn.Sequential(*(([nn.Dropout(p=dropout)] if dropout > 0 else []) + [nn.Linear(filters[-1], out_features)]))
+
 
     def forward(self, data):
-        data = self.layers(data)
-        y = self.fc(data[0])  # B,out_features
+        data = self.graph_layers(data)
+        if self.out_features > 0:
+            y = self.fc(data[0])  # B,out_features
+        else:
+            y = data[0]  # B,N,out_features
         return y, data[4]

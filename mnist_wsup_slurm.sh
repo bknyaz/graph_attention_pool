@@ -18,12 +18,12 @@ seed=$1 #$(( ( RANDOM % 10000 )  + 1 ))
 
 echo $seed
 
-params="--epochs 30 --lr_decay_step 20,25 --test_batch_size 50 -K 10 --aggregation mean -D mnist --n_hidden 0 --readout max -f 4,64,512 --dropout 0.5 --threads 0 --img_features mean,coord --img_noise_levels 0.75,1.0 --pool_arch fc_prev --kl_weight 100"
+params="--epochs 30 --lr_decay_step 20,25 --test_batch_size 50 -K 10 --aggregation mean -D mnist --n_hidden 0 --readout max -f 4,64,512 --dropout 0.5 --threads 0 --img_features mean,coord --img_noise_levels 0.75,1.0 --pool_arch fc_prev --kl_weight 10"
 
-thresh=0.0001
+thresh=0.001
 #python main.py  $params --seed $seed --pool attn_gt_threshold_skip_skip_0 --results $results_dir/gt;
-#for pool in sup;
-  #do python main.py  $params --seed $seed --pool attn_"$pool"_threshold_skip_skip_"$thresh" --results $results_dir/"$pool";
-#done
-python main.py  $params --seed $seed --eval_attn_train --eval_attn_test --results $results_dir/global_max;
+# for pool in unsup;
+  # do python main.py  $params --seed $seed --pool attn_"$pool"_threshold_skip_skip_"$thresh" --results $results_dir/"$pool";
+# done
+#python main.py  $params --seed $seed --eval_attn_train --eval_attn_test --results $results_dir/global_max;
 python main.py  $params --seed $seed --pool attn_sup_threshold_skip_skip_"$thresh" --alpha_ws $results_dir/global_max/mnist_alpha_WS_train_seed"$seed"_orig.pkl --results $results_dir/wsup;

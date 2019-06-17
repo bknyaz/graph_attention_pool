@@ -163,6 +163,7 @@ def update_attn(data, alpha, alpha_pred, alpha_GT, mask):
         for layer in range(len(data[4][key])):
             if layer not in alpha_GT:
                 alpha_GT[layer] = []
+            # print(key, layer)
             alpha_GT[layer].extend(masked_alpha(data[4][key][layer].data.cpu().numpy(), mask[layer]))
     for layer in range(len(alpha)):
         if layer not in alpha_pred:
@@ -172,6 +173,7 @@ def update_attn(data, alpha, alpha_pred, alpha_GT, mask):
 
 def masked_alpha(alpha, mask):
     alpha_lst = []
+    # print(len(alpha), alpha.shape, len(mask), mask[0].shape)
     for i in range(len(alpha)):
         alpha_lst.append(alpha[i][mask[i]])
     return alpha_lst

@@ -119,6 +119,9 @@ class AttentionPooling(nn.Module):
             if not isinstance(params_dict['node_attn'], list):
                 params_dict['node_attn'] = [params_dict['node_attn']]
             alpha_gt = params_dict['node_attn'][-1].view(B, N)
+        if 'node_attn_GT' in params_dict:
+            if not isinstance(params_dict['node_attn_GT'], list):
+                params_dict['node_attn_GT'] = [params_dict['node_attn_GT']]
 
         if (self.pool_type[1] == 'gt' or (self.pool_type[1] == 'sup' and self.training) or self.debug) and alpha_gt is None:
             raise ValueError('ground truth node attention values node_attn required for %s or debug mode' % self.pool_type)
@@ -156,6 +159,9 @@ class AttentionPooling(nn.Module):
             if idx is not None and 'node_attn' in params_dict:
                 # update ground truth (or weakly labeled) attention for a reduced graph
                 params_dict['node_attn'].append((self.mask_out(torch.gather(alpha_gt, dim=1, index=idx), mask.float())))
+            if idx is not None and 'node_attn_GT' in params_dict:
+                # update ground truth (or weakly labeled) attention for a reduced graph
+                params_dict['node_attn_GT'].append((self.mask_out(torch.gather(params_dict['node_attn_GT'][-1], dim=1, index=idx), mask.float())))
 
         mask_matrix = mask.unsqueeze(2) & mask.unsqueeze(1)
         A = A * mask_matrix.float()   # or A[~mask_matrix] = 0

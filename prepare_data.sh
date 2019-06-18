@@ -8,6 +8,9 @@ python generate_data.py -D triangles --N_train 30000 --N_val 5000 --N_test 5000 
 # Generate MNIST-75sp data
 for split in train test; do python extract_superpixels.py -s $split -t 2 -o $out_dir; done
 
+# Generate CIFAR-10-150sp data
+#for split in train test; do python extract_superpixels.py -D cifar10 -c 10 -n 150 -s $split -t 4 -o $out_dir; done
+
 # Download and unzip COLLAB, PROTEINS and D&D
 for dataset in COLLAB PROTEINS DD;
-do wget https://ls11-www.cs.uni-dortmund.de/people/morris/graphkerneldatasets/"$dataset".zip -P -o $out_dir; unzip  "$out_dir"/"$dataset".zip -d $out_dir; done
+do wget https://ls11-www.cs.tu-dortmund.de/people/morris/graphkerneldatasets/"$dataset".zip -P $out_dir; unzip  "$out_dir"/"$dataset".zip -d $out_dir; done

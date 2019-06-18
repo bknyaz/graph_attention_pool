@@ -349,6 +349,7 @@ class GraphData(torch.utils.data.Dataset):
         self.labels = np.array(copy.deepcopy([data['targets'][i] for i in self.idx]))
         self.adj_list = copy.deepcopy([data['adj_list'][i] for i in self.idx])
         self.features_onehot = copy.deepcopy([data['features_onehot'][i] for i in self.idx])
+        self.N_edges = np.array([A.sum() // 2 for A in self.adj_list])  # assume undirected graph with binary edges
         print('%s: %d/%d' % (self.split.upper(), len(self.labels), len(data['targets'])))
         classes = np.unique(self.labels)
         for lbl in classes:
@@ -358,16 +359,31 @@ class GraphData(torch.utils.data.Dataset):
         return len(self.labels)
 
     def __getitem__(self, index):
-        data = [self.features_onehot[index],
-                self.adj_list[index],
-                self.adj_list[index].shape[0],
-                self.labels[index]]
-        if self.w_sup_signal_attn is not None:
-            # print(self.w_sup_signal_attn[index].shape, self.adj_list[index].shape, self.w_sup_signal_attn[index].sum())
-            data += [self.w_sup_signal_attn[index]]
-        data = list_to_torch(data)  # convert to torch
+        if isinstance(index, str):
+            # To make data format consistent with SyntheticGraphs
+            if index == 'Adj_matrices':
+                return self.adj_list
+            elif index == 'GT_attn':
+                print('Ground truth attention is unavailable for this dataset: weakly-supervised labels will be returned')
+                return self.w_sup_signal_attn
+            elif index == 'graph_labels':
+                return self.labels
+            elif index == 'node_features':
+                return self.features_onehot
+            elif index == 'N_edges':
+                return self.N_edges
+            else:
+                raise KeyError(index)
+        else:
+            data = [self.features_onehot[index],
+                    self.adj_list[index],
+                    self.adj_list[index].shape[0],
+                    self.labels[index]]
+            if self.w_sup_signal_attn is not None:
+                data += [self.w_sup_signal_attn[index]]
+            data = list_to_torch(data)  # convert to torch
 
-        return data
+            return data
 
 
 class DataReader():

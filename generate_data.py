@@ -149,12 +149,6 @@ def get_gt_atnn_triangles(args):
 def get_graph_triangles(args):
     N_nodes, rnd = args
     N_edges = int((rnd.rand() + 1) * N_nodes)
-    # N_edges = int((rnd.rand() * N_nodes + 1) * N_nodes)
-    # N_edges = int((rnd.rand() * (N_nodes / 2 - 1) + 1) * N_nodes)
-    #N_edges = int((rnd.rand() * (N_nodes / 2 - 1) + 1) * N_nodes)
-    #print(N_nodes, N_edges)
-    # assert N_edges >= N and N_edges <= N ** 2 / 2, (N_edges, N)
-    # G, A = graph.random_graph(N_nodes, N_edges, seed=None)
     G = nx.dense_gnm_random_graph(N_nodes, N_edges, seed=None)
     A = nx.to_numpy_array(G)
     A_cube = A.dot(A).dot(A)
@@ -165,10 +159,6 @@ def get_graph_triangles(args):
 def generate_graphs_Triangles(N_graphs, N_min, N_max, args, rnd):
     N_nodes = rnd.randint(N_min, N_max + 1, size=int(N_graphs * 10))
     print('generating %d graphs with %d-%d nodes' % (N_graphs * 10, N_min, N_max))
-    # N_edges = []
-    # for i in range(len(N_nodes)):
-    #     if N_nodes[i]
-    #     N_edges.append(int((rnd.rand() * (N_nodes[i] / 2 - 1) + 1) * N_nodes[i]))
 
     if args.threads > 0:
         with mp.Pool(processes=args.threads) as pool:

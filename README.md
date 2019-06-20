@@ -1,10 +1,10 @@
 # Intro
 
-This repository contains code to generate data and reproduce experiments from the extended version of our paper:
+This repository contains code to generate data and reproduce experiments from our paper:
 
-[Boris Knyazev, Graham W. Taylor, Mohamed R. Amer. Understanding attention in graph neural networks](https://arxiv.org/abs/1905.02850), presented as a contributed talk at [ICLR Workshop on Representation Learning on Graphs and Manifolds, 2019](https://rlgm.github.io/cfp/).
+[Boris Knyazev, Graham W. Taylor, Mohamed R. Amer. Understanding Attention and Generalization in Graph Neural Networks](https://arxiv.org/abs/1905.02850). 
 
-*The paper will be updated soon!*
+[An earlier version](https://rlgm.github.io/papers/54.pdf) of the paper was presented as a contributed talk at [ICLR Workshop on Representation Learning on Graphs and Manifolds, 2019](https://rlgm.github.io/cfp/).
 
 *The code to train and evaluate models is also coming soon!*
 
@@ -60,7 +60,7 @@ Please cite our paper if you use our data or code.
 ```
 @inproceedings{knyazev2019understanding,
   author = {Boris Knyazev and Graham Taylor and Mohamed Amer},
-  title = {Understanding Attention in Graph Neural Networks},
+  title = {Understanding Attention and Generalization in Graph Neural Networks},
   booktitle = {International Conference on Learning Representations (ICLR) Workshop on Representation Learning on Graphs and Manifolds},
   year = 2019,
   pdf = {http://arxiv.org/abs/1905.02850}

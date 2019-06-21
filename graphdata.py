@@ -31,21 +31,15 @@ def precompute_graph_images(img_size):
 
 
 def collate_batch_images(batch, A, mask, use_mean_px=True, coord=None, gt_attn_threshold=0):
-    '''
-    Creates a batch of graphs representing images
-    :param batch: batch in the PyTorch Geometric format or [node_features*batch_size, A*batch_size, label*batch_size]
-    :return: [node_features, A, graph_support, N_nodes, label]
-    '''
-
     B = len(batch)
     C, H, W = batch[0][0].shape
     N_nodes = H * W
-    params_dict = {'N_nodes': torch.zeros(B, dtype=torch.long) + N_nodes}
-    has_attn = len(batch[0]) > 2
-    if has_attn:
-        attn_WS = torch.from_numpy(np.stack([batch[b][2].reshape(N_nodes) for b in range(B)]).astype(np.float32)).view(B, N_nodes)
-        attn_WS = attn_WS / (attn_WS.sum(dim=1, keepdim=True) + 1e-7)
-        params_dict.update({'node_attn': attn_WS})  # use these scores for training
+    params_dict = {'N_nodes': torch.zeros(B, dtype=torch.long) + N_nodes, 'node_attn_eval': None}
+    has_WS_attn = len(batch[0]) > 2
+    if has_WS_attn:
+        WS_attn = torch.from_numpy(np.stack([batch[b][2].reshape(N_nodes) for b in range(B)]).astype(np.float32)).view(B, N_nodes)
+        WS_attn = normalize_batch(WS_attn)
+        params_dict.update({'node_attn': WS_attn})  # use these scores for training
 
     if use_mean_px:
         x = torch.stack([batch[b][0].view(C, N_nodes).t() for b in range(B)]).float()
@@ -54,12 +48,11 @@ def collate_batch_images(batch, A, mask, use_mean_px=True, coord=None, gt_attn_t
         else:
             GT_attn = x.view(B, N_nodes).float().clone()
             GT_attn[GT_attn < gt_attn_threshold] = 0
-        GT_attn = GT_attn / (GT_attn.sum(dim=1, keepdim=True) + 1e-7)
+        GT_attn = normalize_batch(GT_attn)
 
-        if has_attn:
-            params_dict.update({'node_attn_GT': GT_attn})  # use this for evaluation of attention
-        else:
-            params_dict.update({'node_attn': GT_attn})
+        params_dict.update({'node_attn_eval': GT_attn})  # use this for evaluation of attention
+        if not has_WS_attn:
+            params_dict.update({'node_attn': GT_attn})  # use this to train attention
     else:
         raise NotImplementedError('this case is not well supported')
 
@@ -95,22 +88,33 @@ def collate_batch(batch):
     mask = torch.zeros(B, N_nodes_max, dtype=torch.uint8)
     A = torch.zeros(B, N_nodes_max, N_nodes_max)
     x = torch.zeros(B, N_nodes_max, C)
-    has_attn = len(batch[0]) > 4 and batch[0][4] is not None
-    if has_attn:
-        node_attn = torch.zeros(B, N_nodes_max)
+    has_GT_attn = len(batch[0]) > 4 and batch[0][4] is not None
+    if has_GT_attn:
+        GT_attn = torch.zeros(B, N_nodes_max)
+    has_WS_attn = len(batch[0]) > 5 and batch[0][5] is not None
+    if has_WS_attn:
+        WS_attn = torch.zeros(B, N_nodes_max)
 
     for b in range(B):
         x[b, :N_nodes[b]] = batch[b][0]
         A[b, :N_nodes[b], :N_nodes[b]] = batch[b][1]
         mask[b][:N_nodes[b]] = 1  # mask with values of 0 for dummy (zero padded) nodes, otherwise 1
-        if has_attn:
-            node_attn[b, :N_nodes[b]] = batch[b][4].squeeze()
+        if has_GT_attn:
+            GT_attn[b, :N_nodes[b]] = batch[b][4].squeeze()
+        if has_WS_attn:
+            WS_attn[b, :N_nodes[b]] = batch[b][5].squeeze()
 
     N_nodes = torch.from_numpy(np.array(N_nodes)).long()
 
     params_dict = {'N_nodes': N_nodes}
-    if has_attn:
-        params_dict.update({'node_attn': node_attn})
+    if has_WS_attn:
+        params_dict.update({'node_attn': WS_attn})  # use this to train attention
+    if has_GT_attn:
+        params_dict.update({'node_attn_eval': GT_attn})  # use this for evaluation of attention
+        if not has_WS_attn:
+            params_dict.update({'node_attn': GT_attn})  # use this to train attention
+    elif has_WS_attn:
+        params_dict.update({'node_attn_eval': WS_attn})  # use this for evaluation of attention
 
     labels = torch.from_numpy(np.array([batch[b][3] for b in range(B)])).long()
     return [x, A, mask, labels, params_dict]
@@ -127,12 +131,6 @@ class MNIST(torchvision.datasets.MNIST):
             print('loading weakly-supervised labels from %s' % attn_coef)
             with open(attn_coef, 'rb') as f:
                 self.alpha_WS = pickle.load(f)
-            # if isinstance(alpha_WS[0], list):
-            # self.alpha_WS = []
-            # for alpha in alpha_WS:
-            #     self.alpha_WS.extend(alpha)
-            # else:
-            #     self.alpha_WS = alpha_WS
             print(train, len(self.alpha_WS))
 
     def __getitem__(self, index):
@@ -164,10 +162,10 @@ class MNIST75sp(torch.utils.data.Dataset):
         self.gt_attn_threshold = gt_attn_threshold
 
         self.alpha_WS = None
-        if attn_coef is not None and os.path.isfile(attn_coef) and not self.is_test:
-            print('loading weakly-supervised labels from %s' % attn_coef)
+        if attn_coef is not None and not self.is_test:
             with open(attn_coef, 'rb') as f:
                 self.alpha_WS = pickle.load(f)
+            print('using weakly-supervised labels from %s (%d samples)' % (attn_coef, len(self.alpha_WS)))
 
     def train_val_split(self, samples_idx):
         self.sp_data = [self.sp_data[i] for i in samples_idx]
@@ -176,7 +174,7 @@ class MNIST75sp(torch.utils.data.Dataset):
 
     def precompute_graph_images(self):
         print('precompute all data for the %s set...' % self.split.upper())
-        self.Adj_matrices, self.node_features, self.GT_attn = [], [], []
+        self.Adj_matrices, self.node_features, self.GT_attn, self.WS_attn = [], [], [], []
         for index, sample in enumerate(self.sp_data):
             mean_px, coord = sample[:2]
             coord = coord / self.img_size
@@ -193,19 +191,20 @@ class MNIST75sp(torch.utils.data.Dataset):
                     x = coord
             if x is None:
                 x = np.ones(N_nodes, 1)  # dummy features
-            x = np.pad(x, ((0, 0), (2, 0)), 'edge')
-            if self.alpha_WS is None:
-                if self.gt_attn_threshold == 0:
-                    gt_attn = (mean_px > 0).astype(np.float32)
-                else:
-                    gt_attn = mean_px.copy()
-                    gt_attn[gt_attn < self.gt_attn_threshold] = 0
+            x = np.pad(x, ((0, 0), (2, 0)), 'edge')  # replicate features to make it possible to test on colored images
+            if self.gt_attn_threshold == 0:
+                gt_attn = (mean_px > 0).astype(np.float32)
             else:
-                gt_attn = self.alpha_WS[index]
+                gt_attn = mean_px.copy()
+                gt_attn[gt_attn < self.gt_attn_threshold] = 0
+            self.GT_attn.append(normalize(gt_attn))
+
+            if self.alpha_WS is not None:
+                self.WS_attn.append(normalize(self.alpha_WS[index]))
 
             self.node_features.append(x)
             self.Adj_matrices.append(A)
-            self.GT_attn.append(gt_attn / (np.sum(gt_attn) + 1e-7))
+
 
     def __len__(self):
         return self.n_samples
@@ -217,6 +216,9 @@ class MNIST75sp(torch.utils.data.Dataset):
                 self.labels[index],
                 self.GT_attn[index]]
 
+        if self.alpha_WS is not None:
+            data.append(self.WS_attn[index])
+
         data = list_to_torch(data)  # convert to torch
 
         return data
@@ -226,7 +228,8 @@ class SyntheticGraphs(torch.utils.data.Dataset):
     def __init__(self,
                  data_dir,
                  dataset,
-                 split):
+                 split,
+                 attn_coef=None):
 
         self.is_test = split.lower() in ['test', 'val']
 
@@ -270,12 +273,21 @@ class SyntheticGraphs(torch.utils.data.Dataset):
                     features = np.pad(features, ((0, 0), (0, 1)), 'constant')
                 self.node_features.append(features)
 
+        self.alpha_WS = None
+        if attn_coef is not None and not self.is_test:
+            with open(attn_coef, 'rb') as f:
+                self.alpha_WS = pickle.load(f)
+            print('using weakly-supervised labels from %s (%d samples)' % (attn_coef, len(self.alpha_WS)))
+            self.WS_attn = []
+            for index in range(len(self.alpha_WS)):
+                self.WS_attn.append(normalize(self.alpha_WS[index]))
+
         N_nodes = np.array([A.shape[0] for A in data['Adj_matrices']])
         self.Adj_matrices = data['Adj_matrices']
         self.GT_attn = data['GT_attn']
         # Normalizing ground truth attention so that it sums to 1
         for i in range(len(self.GT_attn)):
-            self.GT_attn[i] = self.GT_attn[i] / (np.sum(self.GT_attn[i]) + 1e-7)
+            self.GT_attn[i] = normalize(self.GT_attn[i])
             #assert np.sum(self.GT_attn[i]) == 1, (i, np.sum(self.GT_attn[i]), self.GT_attn[i])
         self.labels = data['graph_labels'].astype(np.int32)
         self.classes = np.unique(self.labels)
@@ -308,6 +320,9 @@ class SyntheticGraphs(torch.utils.data.Dataset):
                 self.labels[index],
                 self.GT_attn[index]]
 
+        if self.alpha_WS is not None:
+            data.append(self.WS_attn[index])
+
         data = list_to_torch(data)  # convert to torch
 
         return data
@@ -329,6 +344,10 @@ class GraphData(torch.utils.data.Dataset):
                     self.w_sup_signal_attn = pickle.load(f)
             else:
                 self.w_sup_signal_attn = attn_labels
+            for i in range(len(self.w_sup_signal_attn)):
+                alpha = self.w_sup_signal_attn[i]
+                alpha[alpha < 1e-3] = 0  # assuming that some nodes should have zero importance
+                self.w_sup_signal_attn[i] = normalize(alpha)
             print(('!!!using weakly supervised labels (%d samples)!!!' % len(self.w_sup_signal_attn)).upper())
 
         self.set_fold(datareader.data, fold_id)
@@ -378,9 +397,10 @@ class GraphData(torch.utils.data.Dataset):
             data = [self.features_onehot[index],
                     self.adj_list[index],
                     self.adj_list[index].shape[0],
-                    self.labels[index]]
+                    self.labels[index],
+                    None]  # no GT attention
             if self.w_sup_signal_attn is not None:
-                data += [self.w_sup_signal_attn[index]]
+                data.append(self.w_sup_signal_attn[index])
             data = list_to_torch(data)  # convert to torch
 
             return data

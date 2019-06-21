@@ -20,7 +20,9 @@ def load_save_noise(f, noise_shape):
 
 def list_to_torch(data):
     for i in range(len(data)):
-        if isinstance(data[i], np.ndarray):
+        if data[i] is None:
+            continue
+        elif isinstance(data[i], np.ndarray):
             if data[i].dtype == np.bool:
                 data[i] = data[i].astype(np.float32)
             data[i] = torch.from_numpy(data[i]).float()
@@ -85,11 +87,10 @@ def count_correct(output, target, N_nodes=None, N_nodes_min=0, N_nodes_max=25):
 def attn_AUC(alpha_GT, alpha):
     auc = []
     if len(alpha) > 0 and alpha_GT is not None and len(alpha_GT) > 0:
-        # alpha_GT = np.concatenate([a.flatten() for a in alpha_GT]) > 0
         for layer in alpha:
             alpha_gt = np.concatenate([a.flatten() for a in alpha_GT[layer]]) > 0
             if len(np.unique(alpha_gt)) <= 1:
-                print('Only one class present in y_true. ROC AUC score is not defined in that case.')
+                print('Only one class ({}) present in y_true. ROC AUC score is not defined in that case.'.format(np.unique(alpha_gt)))
                 auc.append(np.nan)
             else:
                 auc.append(100 * roc_auc_score(y_true=alpha_gt,
@@ -101,8 +102,18 @@ def stats(arr):
     return np.mean(arr), np.std(arr), np.min(arr), np.max(arr)
 
 
+def normalize(x, eps=1e-7):
+    return x / (x.sum() + eps)
+
+
 def normalize_batch(x, dim=1, eps=1e-7):
     return x / (x.sum(dim=dim, keepdim=True) + eps)
+
+
+def normalize_zero_one(im):
+    m1 = im.min()
+    m2 = im.max()
+    return (im - m1) / (m2 - m1)
 
 
 def mse_loss(target, output, reduction='mean'):

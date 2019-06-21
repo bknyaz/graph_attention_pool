@@ -67,7 +67,7 @@ To generate training and test data for our MNIST-75sp dataset using 4 CPU thread
 ## Data visualization
 Once datasets are generated or downloaded, you can use the following IPython notebooks to load and visualize data:
 
-[COLORS and TRIANGLES](notebooks/synthetic_graphs_visualize.ipynb), [MNIST-75sp and CIFAR-10-150sp](notebooks/superpixels_visualize.ipynb) and
+[COLORS and TRIANGLES](notebooks/synthetic_graphs_visualize.ipynb), [MNIST](notebooks/superpixels_visualize.ipynb) and
 [COLLAB, PROTEINS and D&D](notebooks/graphs_visualize.ipynb).
 
 

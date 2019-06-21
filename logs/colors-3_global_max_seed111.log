@@ -1,0 +1,596 @@
+start time: 2019-06-21 11:23:37.828931
+gpus:  1
+dataset colors-3
+data_dir ./data
+epochs 100
+batch_size 32
+lr 0.001
+lr_decay_step [90]
+wdecay 0.0001
+dropout 0.0
+filters [64, 64]
+filter_scale 2
+n_hidden 0
+aggregation mean
+readout sum
+kl_weight 100
+pool None
+pool_arch ['fc', 'prev']
+n_nodes 25
+cv_folds 5
+img_features ['mean', 'coord']
+img_noise_levels [0.4, 0.6]
+validation False
+debug False
+eval_attn_train True
+eval_attn_test True
+test_batch_size 100
+alpha_ws None
+log_interval 400
+results ./checkpoints/
+resume None
+device cuda
+seed 111
+threads 0
+experiment_ID:  828931
+train Adj_matrices 500
+train GT_attn 500
+train graph_labels 500
+train node_features 500
+train N_edges 500
+N nodes avg/std/min/max: 	14.26/6.22/4/25
+N edges avg/std/min/max: 	20.87/10.49/4/48
+Node degree avg/std/min/max: 	2.93/1.53/0/9
+Node features dim: 		4
+N classes: 			11
+Correlation of labels with graph size: 	0.18
+Classes: 			[ 0  1  2  3  4  5  6  7  8  9 10]
+Class 0: 			58 samples, N_nodes: avg/std/min/max: 	12.90/6.79/4/25
+Class 1: 			56 samples, N_nodes: avg/std/min/max: 	14.00/6.55/4/25
+Class 2: 			52 samples, N_nodes: avg/std/min/max: 	14.46/7.10/4/25
+Class 3: 			56 samples, N_nodes: avg/std/min/max: 	11.86/5.95/4/25
+Class 4: 			53 samples, N_nodes: avg/std/min/max: 	13.55/6.16/4/25
+Class 5: 			49 samples, N_nodes: avg/std/min/max: 	14.73/6.38/5/25
+Class 6: 			49 samples, N_nodes: avg/std/min/max: 	13.57/4.98/6/23
+Class 7: 			30 samples, N_nodes: avg/std/min/max: 	15.37/5.64/7/25
+Class 8: 			33 samples, N_nodes: avg/std/min/max: 	17.24/4.91/9/24
+Class 9: 			35 samples, N_nodes: avg/std/min/max: 	16.11/4.90/9/25
+Class 10: 			29 samples, N_nodes: avg/std/min/max: 	16.66/4.95/10/25
+test Adj_matrices 7500
+test GT_attn 7500
+test graph_labels 7500
+test node_features 7500
+test N_edges 7500
+N nodes avg/std/min/max: 	80.64/62.43/4/200
+N edges avg/std/min/max: 	120.95/98.42/4/396
+Node degree avg/std/min/max: 	3.00/1.78/0/14
+Node features dim: 		4
+N classes: 			11
+Correlation of labels with graph size: 	0.06
+Classes: 			[ 0  1  2  3  4  5  6  7  8  9 10]
+Class 0: 			730 samples, N_nodes: avg/std/min/max: 	76.34/62.01/4/200
+Class 1: 			699 samples, N_nodes: avg/std/min/max: 	77.19/63.03/4/200
+Class 2: 			706 samples, N_nodes: avg/std/min/max: 	77.07/62.79/4/200
+Class 3: 			699 samples, N_nodes: avg/std/min/max: 	75.73/62.78/4/200
+Class 4: 			717 samples, N_nodes: avg/std/min/max: 	77.32/62.59/4/200
+Class 5: 			697 samples, N_nodes: avg/std/min/max: 	81.44/63.24/5/200
+Class 6: 			687 samples, N_nodes: avg/std/min/max: 	82.32/61.91/6/200
+Class 7: 			690 samples, N_nodes: avg/std/min/max: 	82.41/61.77/7/200
+Class 8: 			638 samples, N_nodes: avg/std/min/max: 	84.81/62.83/8/200
+Class 9: 			641 samples, N_nodes: avg/std/min/max: 	85.45/61.25/9/200
+Class 10: 			596 samples, N_nodes: avg/std/min/max: 	89.37/60.59/10/200
+ChebyGINLayer torch.Size([64, 8]) tensor([0.5559, 0.4973, 0.4914, 0.5325, 0.4516, 0.5541, 0.7513, 0.6097, 0.5125,
+        0.5658], grad_fn=<SliceBackward>)
+ChebyGINLayer torch.Size([64, 128]) tensor([0.5931, 0.5994, 0.5544, 0.5491, 0.5944, 0.5986, 0.6081, 0.5848, 0.5648,
+        0.5838], grad_fn=<SliceBackward>)
+ChebyGIN(
+  (graph_layers): Sequential(
+    (0): ChebyGINLayer(in_features=4, out_features=64, K=2, n_hidden=0, aggregation=mean)
+    fc=Sequential(
+      (0): Linear(in_features=8, out_features=64, bias=True)
+      (1): ReLU(inplace)
+    )
+    (1): ChebyGINLayer(in_features=64, out_features=64, K=2, n_hidden=0, aggregation=mean)
+    fc=Sequential(
+      (0): Linear(in_features=128, out_features=64, bias=True)
+      (1): ReLU(inplace)
+    )
+    (2): GraphReadout(sum)
+  )
+  (fc): Sequential(
+    (0): Linear(in_features=64, out_features=1, bias=True)
+  )
+)
+model capacity: 8897
+model is checked for nodes shuffling
+Train set (epoch 1): [500/500 (100%)]	Loss: 4.0388 (avg: 13.2787), other losses: []	Acc metric: 70/500 (14.00%)	 AttnAUC: []	 avg sec/iter: 0.0076
+
+
+saving the model to ./checkpoints//checkpoint_colors-3_828931_epoch1_seed0000111.pth.tar
+model is checked for nodes shuffling
+lbl: 0, avg acc: 0.00% (0/58)
+lbl: 1, avg acc: 21.43% (12/56)
+lbl: 2, avg acc: 21.15% (11/52)
+lbl: 3, avg acc: 23.21% (13/56)
+lbl: 4, avg acc: 32.08% (17/53)
+lbl: 5, avg acc: 20.41% (10/49)
+lbl: 6, avg acc: 14.29% (7/49)
+lbl: 7, avg acc: 10.00% (3/30)
+lbl: 8, avg acc: 0.00% (0/33)
+lbl: 9, avg acc: 0.00% (0/35)
+lbl: 10, avg acc: 0.00% (0/29)
+0 <= N_nodes <= 25 (min=4, max=25), avg acc: 14.60% (73/500)
+Train set (epoch 1): Avg loss: 4.7120, Acc metric: 73/500 (14.60%)	 AttnAUC: []	 avg sec/iter: 0.0268
+
+model is checked for nodes shuffling
+lbl: 0, avg acc: 0.00% (0/262)
+lbl: 1, avg acc: 31.73% (79/249)
+lbl: 2, avg acc: 28.29% (73/258)
+lbl: 3, avg acc: 24.32% (63/259)
+lbl: 4, avg acc: 29.00% (78/269)
+lbl: 5, avg acc: 25.00% (59/236)
+lbl: 6, avg acc: 18.40% (39/212)
+lbl: 7, avg acc: 4.59% (10/218)
+lbl: 8, avg acc: 0.00% (0/196)
+lbl: 9, avg acc: 0.00% (0/192)
+lbl: 10, avg acc: 0.00% (0/149)
+0 <= N_nodes <= 25 (min=4, max=25), avg acc: 16.04% (401/2500)
+lbl: 0, avg acc: 0.00% (0/226)
+lbl: 1, avg acc: 0.00% (0/216)
+lbl: 2, avg acc: 0.00% (0/223)
+lbl: 3, avg acc: 0.00% (0/237)
+lbl: 4, avg acc: 0.00% (0/229)
+lbl: 5, avg acc: 0.00% (0/231)
+lbl: 6, avg acc: 1.25% (3/240)
+lbl: 7, avg acc: 2.07% (5/242)
+lbl: 8, avg acc: 2.82% (6/213)
+lbl: 9, avg acc: 2.71% (6/221)
+lbl: 10, avg acc: 1.80% (4/222)
+26 <= N_nodes <= 200 (min=26, max=200), avg acc: 0.96% (24/2500)
+lbl: 0, avg acc: 0.00% (0/242)
+lbl: 1, avg acc: 0.00% (0/234)
+lbl: 2, avg acc: 0.00% (0/225)
+lbl: 3, avg acc: 0.00% (0/203)
+lbl: 4, avg acc: 0.00% (0/219)
+lbl: 5, avg acc: 0.00% (0/230)
+lbl: 6, avg acc: 0.43% (1/235)
+lbl: 7, avg acc: 3.04% (7/230)
+lbl: 8, avg acc: 1.31% (3/229)
+lbl: 9, avg acc: 3.07% (7/228)
+lbl: 10, avg acc: 2.67% (6/225)
+26 <= N_nodes <= 200 (min=26, max=200), avg acc: 0.96% (24/2500)
+Test set (epoch 1): Avg loss: 218.5921, Acc metric: 449/7500 (5.99%)	 AttnAUC: []	 avg sec/iter: 0.0118
+
+Train set (epoch 2): [500/500 (100%)]	Loss: 0.5873 (avg: 2.1991), other losses: []	Acc metric: 133/500 (26.60%)	 AttnAUC: []	 avg sec/iter: 0.0035
+
+
+Train set (epoch 3): [500/500 (100%)]	Loss: 0.1954 (avg: 0.2053), other losses: []	Acc metric: 382/500 (76.40%)	 AttnAUC: []	 avg sec/iter: 0.0030
+
+
+Train set (epoch 4): [500/500 (100%)]	Loss: 0.1411 (avg: 0.1459), other losses: []	Acc metric: 417/500 (83.40%)	 AttnAUC: []	 avg sec/iter: 0.0030
+
+
+Train set (epoch 5): [500/500 (100%)]	Loss: 0.1857 (avg: 0.1294), other losses: []	Acc metric: 427/500 (85.40%)	 AttnAUC: []	 avg sec/iter: 0.0030
+
+
+Train set (epoch 6): [500/500 (100%)]	Loss: 0.1421 (avg: 0.1294), other losses: []	Acc metric: 432/500 (86.40%)	 AttnAUC: []	 avg sec/iter: 0.0069
+
+
+Train set (epoch 7): [500/500 (100%)]	Loss: 0.0833 (avg: 0.1182), other losses: []	Acc metric: 432/500 (86.40%)	 AttnAUC: []	 avg sec/iter: 0.0036
+
+
+Train set (epoch 8): [500/500 (100%)]	Loss: 0.1359 (avg: 0.1069), other losses: []	Acc metric: 437/500 (87.40%)	 AttnAUC: []	 avg sec/iter: 0.0035
+
+
+Train set (epoch 9): [500/500 (100%)]	Loss: 0.2092 (avg: 0.1067), other losses: []	Acc metric: 435/500 (87.00%)	 AttnAUC: []	 avg sec/iter: 0.0031
+
+
+Train set (epoch 10): [500/500 (100%)]	Loss: 0.0502 (avg: 0.0982), other losses: []	Acc metric: 450/500 (90.00%)	 AttnAUC: []	 avg sec/iter: 0.0032
+
+
+Train set (epoch 11): [500/500 (100%)]	Loss: 0.0328 (avg: 0.0914), other losses: []	Acc metric: 450/500 (90.00%)	 AttnAUC: []	 avg sec/iter: 0.0032
+
+
+Train set (epoch 12): [500/500 (100%)]	Loss: 0.1351 (avg: 0.0882), other losses: []	Acc metric: 450/500 (90.00%)	 AttnAUC: []	 avg sec/iter: 0.0034
+
+
+Train set (epoch 13): [500/500 (100%)]	Loss: 0.1683 (avg: 0.0780), other losses: []	Acc metric: 459/500 (91.80%)	 AttnAUC: []	 avg sec/iter: 0.0034
+
+
+Train set (epoch 14): [500/500 (100%)]	Loss: 0.0541 (avg: 0.0779), other losses: []	Acc metric: 457/500 (91.40%)	 AttnAUC: []	 avg sec/iter: 0.0033
+
+
+Train set (epoch 15): [500/500 (100%)]	Loss: 0.0494 (avg: 0.0691), other losses: []	Acc metric: 461/500 (92.20%)	 AttnAUC: []	 avg sec/iter: 0.0034
+
+
+Train set (epoch 16): [500/500 (100%)]	Loss: 0.0533 (avg: 0.0665), other losses: []	Acc metric: 460/500 (92.00%)	 AttnAUC: []	 avg sec/iter: 0.0041
+
+
+Train set (epoch 17): [500/500 (100%)]	Loss: 0.0395 (avg: 0.0572), other losses: []	Acc metric: 470/500 (94.00%)	 AttnAUC: []	 avg sec/iter: 0.0040
+
+
+Train set (epoch 18): [500/500 (100%)]	Loss: 0.0702 (avg: 0.0482), other losses: []	Acc metric: 479/500 (95.80%)	 AttnAUC: []	 avg sec/iter: 0.0038
+
+
+Train set (epoch 19): [500/500 (100%)]	Loss: 0.0504 (avg: 0.0463), other losses: []	Acc metric: 482/500 (96.40%)	 AttnAUC: []	 avg sec/iter: 0.0035
+
+
+Train set (epoch 20): [500/500 (100%)]	Loss: 0.0798 (avg: 0.0495), other losses: []	Acc metric: 474/500 (94.80%)	 AttnAUC: []	 avg sec/iter: 0.0035
+
+
+Train set (epoch 21): [500/500 (100%)]	Loss: 0.0540 (avg: 0.0386), other losses: []	Acc metric: 489/500 (97.80%)	 AttnAUC: []	 avg sec/iter: 0.0038
+
+
+Train set (epoch 22): [500/500 (100%)]	Loss: 0.0729 (avg: 0.0523), other losses: []	Acc metric: 471/500 (94.20%)	 AttnAUC: []	 avg sec/iter: 0.0038
+
+
+Train set (epoch 23): [500/500 (100%)]	Loss: 0.0210 (avg: 0.0301), other losses: []	Acc metric: 493/500 (98.60%)	 AttnAUC: []	 avg sec/iter: 0.0040
+
+
+Train set (epoch 24): [500/500 (100%)]	Loss: 0.0591 (avg: 0.0323), other losses: []	Acc metric: 489/500 (97.80%)	 AttnAUC: []	 avg sec/iter: 0.0040
+
+
+Train set (epoch 25): [500/500 (100%)]	Loss: 0.0328 (avg: 0.0287), other losses: []	Acc metric: 491/500 (98.20%)	 AttnAUC: []	 avg sec/iter: 0.0039
+
+
+Train set (epoch 26): [500/500 (100%)]	Loss: 0.0195 (avg: 0.0281), other losses: []	Acc metric: 495/500 (99.00%)	 AttnAUC: []	 avg sec/iter: 0.0039
+
+
+Train set (epoch 27): [500/500 (100%)]	Loss: 0.0114 (avg: 0.0240), other losses: []	Acc metric: 496/500 (99.20%)	 AttnAUC: []	 avg sec/iter: 0.0039
+
+
+Train set (epoch 28): [500/500 (100%)]	Loss: 0.0369 (avg: 0.0207), other losses: []	Acc metric: 496/500 (99.20%)	 AttnAUC: []	 avg sec/iter: 0.0044
+
+
+Train set (epoch 29): [500/500 (100%)]	Loss: 0.0334 (avg: 0.0266), other losses: []	Acc metric: 495/500 (99.00%)	 AttnAUC: []	 avg sec/iter: 0.0056
+
+
+Train set (epoch 30): [500/500 (100%)]	Loss: 0.0079 (avg: 0.0249), other losses: []	Acc metric: 493/500 (98.60%)	 AttnAUC: []	 avg sec/iter: 0.0078
+
+
+Train set (epoch 31): [500/500 (100%)]	Loss: 0.0076 (avg: 0.0161), other losses: []	Acc metric: 498/500 (99.60%)	 AttnAUC: []	 avg sec/iter: 0.0060
+
+
+Train set (epoch 32): [500/500 (100%)]	Loss: 0.0076 (avg: 0.0218), other losses: []	Acc metric: 497/500 (99.40%)	 AttnAUC: []	 avg sec/iter: 0.0044
+
+
+Train set (epoch 33): [500/500 (100%)]	Loss: 0.0301 (avg: 0.0235), other losses: []	Acc metric: 496/500 (99.20%)	 AttnAUC: []	 avg sec/iter: 0.0037
+
+
+Train set (epoch 34): [500/500 (100%)]	Loss: 0.0307 (avg: 0.0154), other losses: []	Acc metric: 497/500 (99.40%)	 AttnAUC: []	 avg sec/iter: 0.0033
+
+
+Train set (epoch 35): [500/500 (100%)]	Loss: 0.0156 (avg: 0.0122), other losses: []	Acc metric: 499/500 (99.80%)	 AttnAUC: []	 avg sec/iter: 0.0033
+
+
+Train set (epoch 36): [500/500 (100%)]	Loss: 0.0095 (avg: 0.0110), other losses: []	Acc metric: 498/500 (99.60%)	 AttnAUC: []	 avg sec/iter: 0.0033
+
+
+Train set (epoch 37): [500/500 (100%)]	Loss: 0.0799 (avg: 0.0174), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0033
+
+
+Train set (epoch 38): [500/500 (100%)]	Loss: 0.0030 (avg: 0.0129), other losses: []	Acc metric: 499/500 (99.80%)	 AttnAUC: []	 avg sec/iter: 0.0033
+
+
+Train set (epoch 39): [500/500 (100%)]	Loss: 0.0798 (avg: 0.0168), other losses: []	Acc metric: 497/500 (99.40%)	 AttnAUC: []	 avg sec/iter: 0.0039
+
+
+Train set (epoch 40): [500/500 (100%)]	Loss: 0.0138 (avg: 0.0181), other losses: []	Acc metric: 499/500 (99.80%)	 AttnAUC: []	 avg sec/iter: 0.0041
+
+
+Train set (epoch 41): [500/500 (100%)]	Loss: 0.0121 (avg: 0.0092), other losses: []	Acc metric: 499/500 (99.80%)	 AttnAUC: []	 avg sec/iter: 0.0040
+
+
+Train set (epoch 42): [500/500 (100%)]	Loss: 0.0390 (avg: 0.0146), other losses: []	Acc metric: 499/500 (99.80%)	 AttnAUC: []	 avg sec/iter: 0.0034
+
+
+Train set (epoch 43): [500/500 (100%)]	Loss: 0.0235 (avg: 0.0140), other losses: []	Acc metric: 499/500 (99.80%)	 AttnAUC: []	 avg sec/iter: 0.0038
+
+
+Train set (epoch 44): [500/500 (100%)]	Loss: 0.0053 (avg: 0.0102), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0033
+
+
+Train set (epoch 45): [500/500 (100%)]	Loss: 0.0100 (avg: 0.0125), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0034
+
+
+Train set (epoch 46): [500/500 (100%)]	Loss: 0.0064 (avg: 0.0086), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0033
+
+
+Train set (epoch 47): [500/500 (100%)]	Loss: 0.0144 (avg: 0.0266), other losses: []	Acc metric: 498/500 (99.60%)	 AttnAUC: []	 avg sec/iter: 0.0034
+
+
+Train set (epoch 48): [500/500 (100%)]	Loss: 0.0031 (avg: 0.0076), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0041
+
+
+Train set (epoch 49): [500/500 (100%)]	Loss: 0.0038 (avg: 0.0063), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0037
+
+
+Train set (epoch 50): [500/500 (100%)]	Loss: 0.0127 (avg: 0.0132), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0040
+
+
+Train set (epoch 51): [500/500 (100%)]	Loss: 0.0026 (avg: 0.0129), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0041
+
+
+Train set (epoch 52): [500/500 (100%)]	Loss: 0.0416 (avg: 0.0121), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0059
+
+
+Train set (epoch 53): [500/500 (100%)]	Loss: 0.0271 (avg: 0.0148), other losses: []	Acc metric: 499/500 (99.80%)	 AttnAUC: []	 avg sec/iter: 0.0060
+
+
+Train set (epoch 54): [500/500 (100%)]	Loss: 0.0023 (avg: 0.0093), other losses: []	Acc metric: 499/500 (99.80%)	 AttnAUC: []	 avg sec/iter: 0.0054
+
+
+Train set (epoch 55): [500/500 (100%)]	Loss: 0.0026 (avg: 0.0056), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0051
+
+
+Train set (epoch 56): [500/500 (100%)]	Loss: 0.0046 (avg: 0.0093), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0047
+
+
+Train set (epoch 57): [500/500 (100%)]	Loss: 0.0070 (avg: 0.0046), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0071
+
+
+Train set (epoch 58): [500/500 (100%)]	Loss: 0.0124 (avg: 0.0259), other losses: []	Acc metric: 499/500 (99.80%)	 AttnAUC: []	 avg sec/iter: 0.0071
+
+
+Train set (epoch 59): [500/500 (100%)]	Loss: 0.0123 (avg: 0.0149), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0077
+
+
+Train set (epoch 60): [500/500 (100%)]	Loss: 0.0111 (avg: 0.0205), other losses: []	Acc metric: 498/500 (99.60%)	 AttnAUC: []	 avg sec/iter: 0.0068
+
+
+Train set (epoch 61): [500/500 (100%)]	Loss: 0.0123 (avg: 0.0052), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0059
+
+
+Train set (epoch 62): [500/500 (100%)]	Loss: 0.0062 (avg: 0.0051), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0055
+
+
+Train set (epoch 63): [500/500 (100%)]	Loss: 0.0290 (avg: 0.0056), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0053
+
+
+Train set (epoch 64): [500/500 (100%)]	Loss: 0.0457 (avg: 0.0792), other losses: []	Acc metric: 466/500 (93.20%)	 AttnAUC: []	 avg sec/iter: 0.0057
+
+
+Train set (epoch 65): [500/500 (100%)]	Loss: 0.0024 (avg: 0.0074), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0073
+
+
+Train set (epoch 66): [500/500 (100%)]	Loss: 0.0019 (avg: 0.0048), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0061
+
+
+Train set (epoch 67): [500/500 (100%)]	Loss: 0.0031 (avg: 0.0033), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0056
+
+
+Train set (epoch 68): [500/500 (100%)]	Loss: 0.0108 (avg: 0.0169), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0052
+
+
+Train set (epoch 69): [500/500 (100%)]	Loss: 0.0166 (avg: 0.0050), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0067
+
+
+Train set (epoch 70): [500/500 (100%)]	Loss: 0.0037 (avg: 0.0032), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0067
+
+
+Train set (epoch 71): [500/500 (100%)]	Loss: 0.0059 (avg: 0.0060), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0078
+
+
+Train set (epoch 72): [500/500 (100%)]	Loss: 0.0019 (avg: 0.0091), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0074
+
+
+Train set (epoch 73): [500/500 (100%)]	Loss: 0.0046 (avg: 0.0028), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0075
+
+
+Train set (epoch 74): [500/500 (100%)]	Loss: 0.0035 (avg: 0.0040), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0076
+
+
+Train set (epoch 75): [500/500 (100%)]	Loss: 0.0064 (avg: 0.0055), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0075
+
+
+Train set (epoch 76): [500/500 (100%)]	Loss: 0.0036 (avg: 0.0117), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0070
+
+
+Train set (epoch 77): [500/500 (100%)]	Loss: 0.0032 (avg: 0.0028), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0053
+
+
+Train set (epoch 78): [500/500 (100%)]	Loss: 0.0055 (avg: 0.0082), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0059
+
+
+Train set (epoch 79): [500/500 (100%)]	Loss: 0.0239 (avg: 0.0055), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0068
+
+
+Train set (epoch 80): [500/500 (100%)]	Loss: 0.0029 (avg: 0.0249), other losses: []	Acc metric: 499/500 (99.80%)	 AttnAUC: []	 avg sec/iter: 0.0064
+
+
+Train set (epoch 81): [500/500 (100%)]	Loss: 0.0073 (avg: 0.0033), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0058
+
+
+Train set (epoch 82): [500/500 (100%)]	Loss: 0.0060 (avg: 0.0080), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0055
+
+
+Train set (epoch 83): [500/500 (100%)]	Loss: 0.0521 (avg: 0.0741), other losses: []	Acc metric: 455/500 (91.00%)	 AttnAUC: []	 avg sec/iter: 0.0059
+
+
+Train set (epoch 84): [500/500 (100%)]	Loss: 0.0029 (avg: 0.0073), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0066
+
+
+Train set (epoch 85): [500/500 (100%)]	Loss: 0.0017 (avg: 0.0022), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0067
+
+
+Train set (epoch 86): [500/500 (100%)]	Loss: 0.0013 (avg: 0.0020), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0062
+
+
+Train set (epoch 87): [500/500 (100%)]	Loss: 0.0027 (avg: 0.0020), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0059
+
+
+Train set (epoch 88): [500/500 (100%)]	Loss: 0.0047 (avg: 0.0055), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0060
+
+
+Train set (epoch 89): [500/500 (100%)]	Loss: 0.0012 (avg: 0.0061), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0072
+
+
+Train set (epoch 90): [500/500 (100%)]	Loss: 0.0054 (avg: 0.0030), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0070
+
+
+Train set (epoch 91): [500/500 (100%)]	Loss: 0.0017 (avg: 0.0017), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0072
+
+
+Train set (epoch 92): [500/500 (100%)]	Loss: 0.0013 (avg: 0.0012), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0072
+
+
+Train set (epoch 93): [500/500 (100%)]	Loss: 0.0020 (avg: 0.0012), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0076
+
+
+Train set (epoch 94): [500/500 (100%)]	Loss: 0.0012 (avg: 0.0012), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0074
+
+
+Train set (epoch 95): [500/500 (100%)]	Loss: 0.0010 (avg: 0.0012), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0066
+
+
+Train set (epoch 96): [500/500 (100%)]	Loss: 0.0010 (avg: 0.0012), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0077
+
+
+Train set (epoch 97): [500/500 (100%)]	Loss: 0.0012 (avg: 0.0012), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0078
+
+
+Train set (epoch 98): [500/500 (100%)]	Loss: 0.0011 (avg: 0.0012), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0062
+
+
+Train set (epoch 99): [500/500 (100%)]	Loss: 0.0019 (avg: 0.0012), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0046
+
+
+Train set (epoch 100): [500/500 (100%)]	Loss: 0.0010 (avg: 0.0012), other losses: []	Acc metric: 500/500 (100.00%)	 AttnAUC: []	 avg sec/iter: 0.0037
+
+
+saving the model to ./checkpoints//checkpoint_colors-3_828931_epoch100_seed0000111.pth.tar
+testing with evaluation of attention: takes longer time
+100/500 samples processed
+200/500 samples processed
+300/500 samples processed
+400/500 samples processed
+500/500 samples processed
+lbl: 0, avg acc: 100.00% (58/58)
+lbl: 1, avg acc: 100.00% (56/56)
+lbl: 2, avg acc: 100.00% (52/52)
+lbl: 3, avg acc: 100.00% (56/56)
+lbl: 4, avg acc: 100.00% (53/53)
+lbl: 5, avg acc: 100.00% (49/49)
+lbl: 6, avg acc: 100.00% (49/49)
+lbl: 7, avg acc: 100.00% (30/30)
+lbl: 8, avg acc: 100.00% (33/33)
+lbl: 9, avg acc: 100.00% (35/35)
+lbl: 10, avg acc: 100.00% (29/29)
+0 <= N_nodes <= 25 (min=4, max=25), avg acc: 100.00% (500/500)
+Train set (epoch 100): Avg loss: 0.0012, Acc metric: 500/500 (100.00%)	 AttnAUC: ['97.99']	 avg sec/iter: 0.1890
+
+testing with evaluation of attention: takes longer time
+100/7500 samples processed
+200/7500 samples processed
+300/7500 samples processed
+400/7500 samples processed
+500/7500 samples processed
+600/7500 samples processed
+700/7500 samples processed
+800/7500 samples processed
+900/7500 samples processed
+1000/7500 samples processed
+1100/7500 samples processed
+1200/7500 samples processed
+1300/7500 samples processed
+1400/7500 samples processed
+1500/7500 samples processed
+1600/7500 samples processed
+1700/7500 samples processed
+1800/7500 samples processed
+1900/7500 samples processed
+2000/7500 samples processed
+2100/7500 samples processed
+2200/7500 samples processed
+2300/7500 samples processed
+2400/7500 samples processed
+2500/7500 samples processed
+2600/7500 samples processed
+2700/7500 samples processed
+2800/7500 samples processed
+2900/7500 samples processed
+3000/7500 samples processed
+3100/7500 samples processed
+3200/7500 samples processed
+3300/7500 samples processed
+3400/7500 samples processed
+3500/7500 samples processed
+3600/7500 samples processed
+3700/7500 samples processed
+3800/7500 samples processed
+3900/7500 samples processed
+4000/7500 samples processed
+4100/7500 samples processed
+4200/7500 samples processed
+4300/7500 samples processed
+4400/7500 samples processed
+4500/7500 samples processed
+4600/7500 samples processed
+4700/7500 samples processed
+4800/7500 samples processed
+4900/7500 samples processed
+5000/7500 samples processed
+5100/7500 samples processed
+5200/7500 samples processed
+5300/7500 samples processed
+5400/7500 samples processed
+5500/7500 samples processed
+5600/7500 samples processed
+5700/7500 samples processed
+5800/7500 samples processed
+5900/7500 samples processed
+6000/7500 samples processed
+6100/7500 samples processed
+6200/7500 samples processed
+6300/7500 samples processed
+6400/7500 samples processed
+6500/7500 samples processed
+6600/7500 samples processed
+6700/7500 samples processed
+6800/7500 samples processed
+6900/7500 samples processed
+7000/7500 samples processed
+7100/7500 samples processed
+7200/7500 samples processed
+7300/7500 samples processed
+7400/7500 samples processed
+7500/7500 samples processed
+lbl: 0, avg acc: 100.00% (262/262)
+lbl: 1, avg acc: 100.00% (249/249)
+lbl: 2, avg acc: 100.00% (258/258)
+lbl: 3, avg acc: 100.00% (259/259)
+lbl: 4, avg acc: 100.00% (269/269)
+lbl: 5, avg acc: 100.00% (236/236)
+lbl: 6, avg acc: 100.00% (212/212)
+lbl: 7, avg acc: 100.00% (218/218)
+lbl: 8, avg acc: 100.00% (196/196)
+lbl: 9, avg acc: 100.00% (192/192)
+lbl: 10, avg acc: 100.00% (149/149)
+0 <= N_nodes <= 25 (min=4, max=25), avg acc: 100.00% (2500/2500)
+lbl: 0, avg acc: 54.87% (124/226)
+lbl: 1, avg acc: 58.80% (127/216)
+lbl: 2, avg acc: 58.30% (130/223)
+lbl: 3, avg acc: 60.76% (144/237)
+lbl: 4, avg acc: 59.83% (137/229)
+lbl: 5, avg acc: 59.31% (137/231)
+lbl: 6, avg acc: 65.42% (157/240)
+lbl: 7, avg acc: 63.64% (154/242)
+lbl: 8, avg acc: 65.26% (139/213)
+lbl: 9, avg acc: 69.23% (153/221)
+lbl: 10, avg acc: 67.12% (149/222)
+26 <= N_nodes <= 200 (min=26, max=200), avg acc: 62.04% (1551/2500)
+lbl: 0, avg acc: 12.81% (31/242)
+lbl: 1, avg acc: 14.10% (33/234)
+lbl: 2, avg acc: 14.67% (33/225)
+lbl: 3, avg acc: 13.30% (27/203)
+lbl: 4, avg acc: 12.79% (28/219)
+lbl: 5, avg acc: 14.78% (34/230)
+lbl: 6, avg acc: 12.77% (30/235)
+lbl: 7, avg acc: 16.96% (39/230)
+lbl: 8, avg acc: 14.85% (34/229)
+lbl: 9, avg acc: 16.67% (38/228)
+lbl: 10, avg acc: 19.11% (43/225)
+26 <= N_nodes <= 200 (min=26, max=200), avg acc: 14.80% (370/2500)
+Test set (epoch 100): Avg loss: 1.8102, Acc metric: 4421/7500 (58.95%)	 AttnAUC: ['99.83']	 avg sec/iter: 0.5009
+
+done in 0:00:50.659462

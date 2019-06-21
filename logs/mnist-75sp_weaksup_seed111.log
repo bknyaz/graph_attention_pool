@@ -1,0 +1,400 @@
+start time: 2019-06-20 21:06:18.065802
+gpus:  1
+dataset mnist-75sp
+data_dir ./data
+epochs 30
+batch_size 32
+lr 0.001
+lr_decay_step [20, 25]
+wdecay 0.0001
+dropout 0.5
+filters [4, 64, 512]
+filter_scale 4
+n_hidden 0
+aggregation mean
+readout max
+kl_weight 100.0
+pool ['attn', 'sup', 'threshold', 'skip', 'skip', '0.01']
+pool_arch ['fc', 'prev']
+n_nodes 25
+cv_folds 5
+img_features ['mean', 'coord']
+img_noise_levels [0.4, 0.6]
+validation False
+debug False
+eval_attn_train False
+eval_attn_test False
+test_batch_size 100
+alpha_ws ./checkpoints//mnist-75sp_alpha_WS_train_seed111_orig.pkl
+log_interval 400
+results ./checkpoints/
+resume None
+device cuda
+seed 111
+threads 0
+experiment_ID:  065802
+using weakly-supervised labels from ./checkpoints//mnist-75sp_alpha_WS_train_seed111_orig.pkl (60000 samples)
+loading noise from ./data/mnist_75sp_noise.pt
+loading noise from ./data/mnist_75sp_color_noise.pt
+precompute all data for the TRAIN set...
+precompute all data for the TEST set...
+ChebyGINLayer torch.Size([4, 20]) tensor([0.5133, 0.5007, 0.6548, 0.5493], grad_fn=<SliceBackward>)
+ChebyGINLayer torch.Size([64, 16]) tensor([0.5050, 0.5075, 0.6239, 0.5647, 0.4541, 0.6228, 0.5159, 0.6019, 0.4718,
+        0.4111], grad_fn=<SliceBackward>)
+p values [-0.83165795  0.23416835  0.8125257  -0.37826526]
+cos_sim 0.1974373608827591
+ChebyGINLayer torch.Size([512, 256]) tensor([0.5978, 0.5864, 0.5723, 0.5901, 0.5626, 0.5665, 0.5706, 0.5933, 0.5743,
+        0.5911], grad_fn=<SliceBackward>)
+ChebyGIN(
+  (graph_layers): Sequential(
+    (0): ChebyGINLayer(in_features=5, out_features=4, K=4, n_hidden=0, aggregation=mean)
+    fc=Sequential(
+      (0): Linear(in_features=20, out_features=4, bias=True)
+      (1): ReLU(inplace)
+    )
+    (1): ChebyGINLayer(in_features=4, out_features=64, K=4, n_hidden=0, aggregation=mean)
+    fc=Sequential(
+      (0): Linear(in_features=16, out_features=64, bias=True)
+      (1): ReLU(inplace)
+    )
+    (2): AttentionPooling(pool_type=['attn', 'sup', 'threshold', '0.01'], pool_arch=['fc', 'prev'], topk=False, kl_weight=100.0, proj=Linear(in_features=4, out_features=1, bias=False))
+    (3): ChebyGINLayer(in_features=64, out_features=512, K=4, n_hidden=0, aggregation=mean)
+    fc=Sequential(
+      (0): Linear(in_features=256, out_features=512, bias=True)
+      (1): ReLU(inplace)
+    )
+    (4): GraphReadout(max)
+  )
+  (fc): Sequential(
+    (0): Dropout(p=0.5)
+    (1): Linear(in_features=512, out_features=10, bias=True)
+  )
+)
+model capacity: 137890
+computing mean and std of input features
+features shape loaded torch.Size([2404704, 5])
+mn [[0.11198103 0.11198103 0.11198103 0.44179913 0.43922868]]
+std [[0.27186117 0.27186117 0.27186117 0.2988896  0.30093625]]
+corrected (non zeros) std [[0.27186117 0.27186117 0.27186117 0.2988896  0.30093625]]
+model is checked for nodes shuffling
+Train set (epoch 1): [12832/60000 (21%)]	Loss: 2.4056 (avg: 2.4597), other losses: ['0.4486']	Acc metric: 3569/12832 (27.81%)	 AttnAUC: ['95.54']	 avg sec/iter: 0.0078
+Train set (epoch 1): [25632/60000 (43%)]	Loss: 1.7729 (avg: 2.3030), other losses: ['0.4436']	Acc metric: 8828/25632 (34.44%)	 AttnAUC: ['96.12']	 avg sec/iter: 0.0076
+Train set (epoch 1): [38432/60000 (64%)]	Loss: 1.7441 (avg: 2.1870), other losses: ['0.4812']	Acc metric: 15103/38432 (39.30%)	 AttnAUC: ['96.14']	 avg sec/iter: 0.0079
+Train set (epoch 1): [51232/60000 (85%)]	Loss: 1.7755 (avg: 2.0875), other losses: ['0.4344']	Acc metric: 22295/51232 (43.52%)	 AttnAUC: ['96.17']	 avg sec/iter: 0.0081
+Train set (epoch 1): [60000/60000 (100%)]	Loss: 1.3980 (avg: 2.0188), other losses: ['0.4543']	Acc metric: 27773/60000 (46.29%)	 AttnAUC: ['96.19']	 avg sec/iter: 0.0085
+
+
+saving the model to ./checkpoints//checkpoint_mnist-75sp_065802_epoch1_seed0000111.pth.tar
+model is checked for nodes shuffling
+lbl: 0, avg acc: 87.41% (5177/5923)
+lbl: 1, avg acc: 96.62% (6514/6742)
+lbl: 2, avg acc: 70.38% (4193/5958)
+lbl: 3, avg acc: 52.34% (3209/6131)
+lbl: 4, avg acc: 49.54% (2894/5842)
+lbl: 5, avg acc: 37.21% (2017/5421)
+lbl: 6, avg acc: 67.46% (3992/5918)
+lbl: 7, avg acc: 74.01% (4637/6265)
+lbl: 8, avg acc: 68.36% (4000/5851)
+lbl: 9, avg acc: 62.68% (3729/5949)
+0 <= N_nodes <= 100000.0 (min=40, max=75), avg acc: 67.27% (40362/60000)
+Train set (epoch 1): Avg loss: 1.0320, Acc metric: 40362/60000 (67.27%)	 AttnAUC: ['96.33']	 avg sec/iter: 0.0083
+
+model is checked for nodes shuffling
+lbl: 0, avg acc: 89.29% (875/980)
+lbl: 1, avg acc: 97.44% (1106/1135)
+lbl: 2, avg acc: 72.58% (749/1032)
+lbl: 3, avg acc: 48.51% (490/1010)
+lbl: 4, avg acc: 49.49% (486/982)
+lbl: 5, avg acc: 38.12% (340/892)
+lbl: 6, avg acc: 68.06% (652/958)
+lbl: 7, avg acc: 72.28% (743/1028)
+lbl: 8, avg acc: 71.15% (693/974)
+lbl: 9, avg acc: 64.22% (648/1009)
+0 <= N_nodes <= 100000.0 (min=42, max=75), avg acc: 67.82% (6782/10000)
+Test set (epoch 1): Avg loss: 1.0121, Acc metric: 6782/10000 (67.82%)	 AttnAUC: ['96.29']	 avg sec/iter: 0.0082
+
+model is checked for nodes shuffling
+lbl: 0, avg acc: 83.57% (819/980)
+lbl: 1, avg acc: 90.57% (1028/1135)
+lbl: 2, avg acc: 69.09% (713/1032)
+lbl: 3, avg acc: 41.68% (421/1010)
+lbl: 4, avg acc: 40.63% (399/982)
+lbl: 5, avg acc: 33.52% (299/892)
+lbl: 6, avg acc: 56.89% (545/958)
+lbl: 7, avg acc: 62.84% (646/1028)
+lbl: 8, avg acc: 55.54% (541/974)
+lbl: 9, avg acc: 47.08% (475/1009)
+0 <= N_nodes <= 100000.0 (min=42, max=75), avg acc: 58.86% (5886/10000)
+Test set (epoch 1): Avg loss: 1.2281, Acc metric: 5886/10000 (58.86%)	 AttnAUC: ['96.02']	 avg sec/iter: 0.0083
+
+model is checked for nodes shuffling
+lbl: 0, avg acc: 86.22% (845/980)
+lbl: 1, avg acc: 93.04% (1056/1135)
+lbl: 2, avg acc: 68.90% (711/1032)
+lbl: 3, avg acc: 40.40% (408/1010)
+lbl: 4, avg acc: 42.87% (421/982)
+lbl: 5, avg acc: 34.19% (305/892)
+lbl: 6, avg acc: 60.96% (584/958)
+lbl: 7, avg acc: 65.76% (676/1028)
+lbl: 8, avg acc: 59.03% (575/974)
+lbl: 9, avg acc: 48.76% (492/1009)
+0 <= N_nodes <= 100000.0 (min=42, max=75), avg acc: 60.73% (6073/10000)
+Test set (epoch 1): Avg loss: 1.1899, Acc metric: 6073/10000 (60.73%)	 AttnAUC: ['96.07']	 avg sec/iter: 0.0086
+
+Train set (epoch 2): [12832/60000 (21%)]	Loss: 1.2108 (avg: 1.4884), other losses: ['0.4499']	Acc metric: 8563/12832 (66.73%)	 AttnAUC: ['96.37']	 avg sec/iter: 0.0061
+Train set (epoch 2): [25632/60000 (43%)]	Loss: 1.1596 (avg: 1.4105), other losses: ['0.4432']	Acc metric: 17832/25632 (69.57%)	 AttnAUC: ['96.38']	 avg sec/iter: 0.0064
+Train set (epoch 2): [38432/60000 (64%)]	Loss: 1.2202 (avg: 1.3569), other losses: ['0.4628']	Acc metric: 27506/38432 (71.57%)	 AttnAUC: ['96.40']	 avg sec/iter: 0.0068
+Train set (epoch 2): [51232/60000 (85%)]	Loss: 1.1585 (avg: 1.3102), other losses: ['0.4610']	Acc metric: 37454/51232 (73.11%)	 AttnAUC: ['96.40']	 avg sec/iter: 0.0072
+Train set (epoch 2): [60000/60000 (100%)]	Loss: 0.8941 (avg: 1.2834), other losses: ['0.4254']	Acc metric: 44328/60000 (73.88%)	 AttnAUC: ['96.40']	 avg sec/iter: 0.0075
+
+
+Train set (epoch 3): [12832/60000 (21%)]	Loss: 0.9669 (avg: 1.0853), other losses: ['0.4521']	Acc metric: 10310/12832 (80.35%)	 AttnAUC: ['96.72']	 avg sec/iter: 0.0065
+Train set (epoch 3): [25632/60000 (43%)]	Loss: 1.1820 (avg: 1.0628), other losses: ['0.4542']	Acc metric: 20810/25632 (81.19%)	 AttnAUC: ['96.66']	 avg sec/iter: 0.0072
+Train set (epoch 3): [38432/60000 (64%)]	Loss: 0.7789 (avg: 1.0439), other losses: ['0.4034']	Acc metric: 31377/38432 (81.64%)	 AttnAUC: ['96.65']	 avg sec/iter: 0.0075
+Train set (epoch 3): [51232/60000 (85%)]	Loss: 1.0593 (avg: 1.0355), other losses: ['0.4803']	Acc metric: 41965/51232 (81.91%)	 AttnAUC: ['96.66']	 avg sec/iter: 0.0079
+Train set (epoch 3): [60000/60000 (100%)]	Loss: 1.1677 (avg: 1.0281), other losses: ['0.4438']	Acc metric: 49309/60000 (82.18%)	 AttnAUC: ['96.68']	 avg sec/iter: 0.0083
+
+
+Train set (epoch 4): [12832/60000 (21%)]	Loss: 1.3109 (avg: 0.9474), other losses: ['0.4763']	Acc metric: 10898/12832 (84.93%)	 AttnAUC: ['96.84']	 avg sec/iter: 0.0070
+Train set (epoch 4): [25632/60000 (43%)]	Loss: 0.6918 (avg: 0.9458), other losses: ['0.4667']	Acc metric: 21805/25632 (85.07%)	 AttnAUC: ['96.83']	 avg sec/iter: 0.0075
+Train set (epoch 4): [38432/60000 (64%)]	Loss: 1.2505 (avg: 0.9428), other losses: ['0.4739']	Acc metric: 32671/38432 (85.01%)	 AttnAUC: ['96.85']	 avg sec/iter: 0.0076
+Train set (epoch 4): [51232/60000 (85%)]	Loss: 0.7605 (avg: 0.9355), other losses: ['0.4590']	Acc metric: 43626/51232 (85.15%)	 AttnAUC: ['96.83']	 avg sec/iter: 0.0081
+Train set (epoch 4): [60000/60000 (100%)]	Loss: 0.8911 (avg: 0.9323), other losses: ['0.4495']	Acc metric: 51157/60000 (85.26%)	 AttnAUC: ['96.82']	 avg sec/iter: 0.0085
+
+
+Train set (epoch 5): [12832/60000 (21%)]	Loss: 0.9384 (avg: 0.8949), other losses: ['0.4496']	Acc metric: 11084/12832 (86.38%)	 AttnAUC: ['97.07']	 avg sec/iter: 0.0072
+Train set (epoch 5): [25632/60000 (43%)]	Loss: 0.7436 (avg: 0.8892), other losses: ['0.4519']	Acc metric: 22191/25632 (86.58%)	 AttnAUC: ['97.03']	 avg sec/iter: 0.0075
+Train set (epoch 5): [38432/60000 (64%)]	Loss: 0.7118 (avg: 0.8883), other losses: ['0.4531']	Acc metric: 33295/38432 (86.63%)	 AttnAUC: ['97.00']	 avg sec/iter: 0.0079
+Train set (epoch 5): [51232/60000 (85%)]	Loss: 0.9986 (avg: 0.8849), other losses: ['0.4471']	Acc metric: 44454/51232 (86.77%)	 AttnAUC: ['97.01']	 avg sec/iter: 0.0082
+Train set (epoch 5): [60000/60000 (100%)]	Loss: 0.9526 (avg: 0.8798), other losses: ['0.4560']	Acc metric: 52128/60000 (86.88%)	 AttnAUC: ['97.01']	 avg sec/iter: 0.0085
+
+
+Train set (epoch 6): [12832/60000 (21%)]	Loss: 1.1316 (avg: 0.8485), other losses: ['0.4657']	Acc metric: 11273/12832 (87.85%)	 AttnAUC: ['96.97']	 avg sec/iter: 0.0064
+Train set (epoch 6): [25632/60000 (43%)]	Loss: 0.9757 (avg: 0.8486), other losses: ['0.4510']	Acc metric: 22529/25632 (87.89%)	 AttnAUC: ['96.99']	 avg sec/iter: 0.0078
+Train set (epoch 6): [38432/60000 (64%)]	Loss: 0.7766 (avg: 0.8467), other losses: ['0.4700']	Acc metric: 33750/38432 (87.82%)	 AttnAUC: ['96.97']	 avg sec/iter: 0.0083
+Train set (epoch 6): [51232/60000 (85%)]	Loss: 0.8631 (avg: 0.8416), other losses: ['0.4771']	Acc metric: 45084/51232 (88.00%)	 AttnAUC: ['96.99']	 avg sec/iter: 0.0093
+Train set (epoch 6): [60000/60000 (100%)]	Loss: 0.9373 (avg: 0.8382), other losses: ['0.4444']	Acc metric: 52899/60000 (88.17%)	 AttnAUC: ['97.00']	 avg sec/iter: 0.0096
+
+
+Train set (epoch 7): [12832/60000 (21%)]	Loss: 0.6737 (avg: 0.8251), other losses: ['0.4462']	Acc metric: 11415/12832 (88.96%)	 AttnAUC: ['97.03']	 avg sec/iter: 0.0086
+Train set (epoch 7): [25632/60000 (43%)]	Loss: 0.6999 (avg: 0.8187), other losses: ['0.4619']	Acc metric: 22816/25632 (89.01%)	 AttnAUC: ['97.03']	 avg sec/iter: 0.0091
+Train set (epoch 7): [38432/60000 (64%)]	Loss: 0.7913 (avg: 0.8153), other losses: ['0.4660']	Acc metric: 34256/38432 (89.13%)	 AttnAUC: ['97.07']	 avg sec/iter: 0.0089
+Train set (epoch 7): [51232/60000 (85%)]	Loss: 0.6537 (avg: 0.8096), other losses: ['0.4274']	Acc metric: 45725/51232 (89.25%)	 AttnAUC: ['97.10']	 avg sec/iter: 0.0087
+Train set (epoch 7): [60000/60000 (100%)]	Loss: 0.7668 (avg: 0.8083), other losses: ['0.4288']	Acc metric: 53555/60000 (89.26%)	 AttnAUC: ['97.10']	 avg sec/iter: 0.0089
+
+
+Train set (epoch 8): [12832/60000 (21%)]	Loss: 0.6900 (avg: 0.8000), other losses: ['0.4197']	Acc metric: 11496/12832 (89.59%)	 AttnAUC: ['97.12']	 avg sec/iter: 0.0061
+Train set (epoch 8): [25632/60000 (43%)]	Loss: 0.6251 (avg: 0.7922), other losses: ['0.4169']	Acc metric: 22982/25632 (89.66%)	 AttnAUC: ['97.09']	 avg sec/iter: 0.0064
+Train set (epoch 8): [38432/60000 (64%)]	Loss: 0.8565 (avg: 0.7867), other losses: ['0.4355']	Acc metric: 34522/38432 (89.83%)	 AttnAUC: ['97.12']	 avg sec/iter: 0.0068
+Train set (epoch 8): [51232/60000 (85%)]	Loss: 0.6436 (avg: 0.7854), other losses: ['0.4500']	Acc metric: 46043/51232 (89.87%)	 AttnAUC: ['97.11']	 avg sec/iter: 0.0072
+Train set (epoch 8): [60000/60000 (100%)]	Loss: 0.8214 (avg: 0.7857), other losses: ['0.4567']	Acc metric: 53929/60000 (89.88%)	 AttnAUC: ['97.13']	 avg sec/iter: 0.0075
+
+
+Train set (epoch 9): [12832/60000 (21%)]	Loss: 0.8385 (avg: 0.7809), other losses: ['0.4405']	Acc metric: 11555/12832 (90.05%)	 AttnAUC: ['97.27']	 avg sec/iter: 0.0061
+Train set (epoch 9): [25632/60000 (43%)]	Loss: 0.5852 (avg: 0.7748), other losses: ['0.4530']	Acc metric: 23115/25632 (90.18%)	 AttnAUC: ['97.21']	 avg sec/iter: 0.0070
+Train set (epoch 9): [38432/60000 (64%)]	Loss: 0.5964 (avg: 0.7723), other losses: ['0.4238']	Acc metric: 34751/38432 (90.42%)	 AttnAUC: ['97.18']	 avg sec/iter: 0.0072
+Train set (epoch 9): [51232/60000 (85%)]	Loss: 0.6970 (avg: 0.7701), other losses: ['0.4427']	Acc metric: 46309/51232 (90.39%)	 AttnAUC: ['97.20']	 avg sec/iter: 0.0076
+Train set (epoch 9): [60000/60000 (100%)]	Loss: 0.7351 (avg: 0.7688), other losses: ['0.4452']	Acc metric: 54256/60000 (90.43%)	 AttnAUC: ['97.20']	 avg sec/iter: 0.0081
+
+
+Train set (epoch 10): [12832/60000 (21%)]	Loss: 0.6141 (avg: 0.7514), other losses: ['0.4297']	Acc metric: 11664/12832 (90.90%)	 AttnAUC: ['97.05']	 avg sec/iter: 0.0062
+Train set (epoch 10): [25632/60000 (43%)]	Loss: 1.0973 (avg: 0.7476), other losses: ['0.4426']	Acc metric: 23318/25632 (90.97%)	 AttnAUC: ['97.09']	 avg sec/iter: 0.0064
+Train set (epoch 10): [38432/60000 (64%)]	Loss: 0.6675 (avg: 0.7502), other losses: ['0.4271']	Acc metric: 34957/38432 (90.96%)	 AttnAUC: ['97.16']	 avg sec/iter: 0.0067
+Train set (epoch 10): [51232/60000 (85%)]	Loss: 0.7478 (avg: 0.7496), other losses: ['0.4427']	Acc metric: 46603/51232 (90.96%)	 AttnAUC: ['97.17']	 avg sec/iter: 0.0076
+Train set (epoch 10): [60000/60000 (100%)]	Loss: 0.6998 (avg: 0.7482), other losses: ['0.4406']	Acc metric: 54624/60000 (91.04%)	 AttnAUC: ['97.18']	 avg sec/iter: 0.0083
+
+
+Train set (epoch 11): [12832/60000 (21%)]	Loss: 0.8919 (avg: 0.7447), other losses: ['0.4525']	Acc metric: 11696/12832 (91.15%)	 AttnAUC: ['97.20']	 avg sec/iter: 0.0068
+Train set (epoch 11): [25632/60000 (43%)]	Loss: 0.8628 (avg: 0.7335), other losses: ['0.4355']	Acc metric: 23445/25632 (91.47%)	 AttnAUC: ['97.25']	 avg sec/iter: 0.0069
+Train set (epoch 11): [38432/60000 (64%)]	Loss: 0.7300 (avg: 0.7381), other losses: ['0.4556']	Acc metric: 35111/38432 (91.36%)	 AttnAUC: ['97.28']	 avg sec/iter: 0.0084
+Train set (epoch 11): [51232/60000 (85%)]	Loss: 0.7767 (avg: 0.7367), other losses: ['0.4579']	Acc metric: 46845/51232 (91.44%)	 AttnAUC: ['97.24']	 avg sec/iter: 0.0091
+Train set (epoch 11): [60000/60000 (100%)]	Loss: 0.9004 (avg: 0.7368), other losses: ['0.4916']	Acc metric: 54838/60000 (91.40%)	 AttnAUC: ['97.23']	 avg sec/iter: 0.0096
+
+
+Train set (epoch 12): [12832/60000 (21%)]	Loss: 0.7080 (avg: 0.7247), other losses: ['0.4448']	Acc metric: 11766/12832 (91.69%)	 AttnAUC: ['97.27']	 avg sec/iter: 0.0078
+Train set (epoch 12): [25632/60000 (43%)]	Loss: 1.0750 (avg: 0.7375), other losses: ['0.4767']	Acc metric: 23436/25632 (91.43%)	 AttnAUC: ['97.25']	 avg sec/iter: 0.0083
+Train set (epoch 12): [38432/60000 (64%)]	Loss: 0.8763 (avg: 0.7308), other losses: ['0.4815']	Acc metric: 35169/38432 (91.51%)	 AttnAUC: ['97.28']	 avg sec/iter: 0.0085
+Train set (epoch 12): [51232/60000 (85%)]	Loss: 0.7793 (avg: 0.7267), other losses: ['0.4304']	Acc metric: 46921/51232 (91.59%)	 AttnAUC: ['97.24']	 avg sec/iter: 0.0084
+Train set (epoch 12): [60000/60000 (100%)]	Loss: 0.5726 (avg: 0.7254), other losses: ['0.4220']	Acc metric: 54997/60000 (91.66%)	 AttnAUC: ['97.24']	 avg sec/iter: 0.0086
+
+
+Train set (epoch 13): [12832/60000 (21%)]	Loss: 0.6750 (avg: 0.7108), other losses: ['0.4866']	Acc metric: 11783/12832 (91.83%)	 AttnAUC: ['97.33']	 avg sec/iter: 0.0061
+Train set (epoch 13): [25632/60000 (43%)]	Loss: 0.5629 (avg: 0.7152), other losses: ['0.4447']	Acc metric: 23578/25632 (91.99%)	 AttnAUC: ['97.38']	 avg sec/iter: 0.0064
+Train set (epoch 13): [38432/60000 (64%)]	Loss: 0.6200 (avg: 0.7175), other losses: ['0.4548']	Acc metric: 35335/38432 (91.94%)	 AttnAUC: ['97.40']	 avg sec/iter: 0.0067
+Train set (epoch 13): [51232/60000 (85%)]	Loss: 0.9035 (avg: 0.7174), other losses: ['0.4650']	Acc metric: 47070/51232 (91.88%)	 AttnAUC: ['97.37']	 avg sec/iter: 0.0071
+Train set (epoch 13): [60000/60000 (100%)]	Loss: 0.6620 (avg: 0.7160), other losses: ['0.4489']	Acc metric: 55150/60000 (91.92%)	 AttnAUC: ['97.37']	 avg sec/iter: 0.0077
+
+
+Train set (epoch 14): [12832/60000 (21%)]	Loss: 0.6233 (avg: 0.7069), other losses: ['0.4996']	Acc metric: 11852/12832 (92.36%)	 AttnAUC: ['97.34']	 avg sec/iter: 0.0066
+Train set (epoch 14): [25632/60000 (43%)]	Loss: 0.5844 (avg: 0.7116), other losses: ['0.4267']	Acc metric: 23626/25632 (92.17%)	 AttnAUC: ['97.35']	 avg sec/iter: 0.0078
+Train set (epoch 14): [38432/60000 (64%)]	Loss: 0.6588 (avg: 0.7070), other losses: ['0.4884']	Acc metric: 35463/38432 (92.27%)	 AttnAUC: ['97.35']	 avg sec/iter: 0.0085
+Train set (epoch 14): [51232/60000 (85%)]	Loss: 0.6567 (avg: 0.7089), other losses: ['0.4541']	Acc metric: 47267/51232 (92.26%)	 AttnAUC: ['97.33']	 avg sec/iter: 0.0088
+Train set (epoch 14): [60000/60000 (100%)]	Loss: 0.7152 (avg: 0.7070), other losses: ['0.4775']	Acc metric: 55379/60000 (92.30%)	 AttnAUC: ['97.32']	 avg sec/iter: 0.0093
+
+
+Train set (epoch 15): [12832/60000 (21%)]	Loss: 0.6285 (avg: 0.6951), other losses: ['0.4782']	Acc metric: 11885/12832 (92.62%)	 AttnAUC: ['97.38']	 avg sec/iter: 0.0065
+Train set (epoch 15): [25632/60000 (43%)]	Loss: 0.7142 (avg: 0.7026), other losses: ['0.4378']	Acc metric: 23672/25632 (92.35%)	 AttnAUC: ['97.32']	 avg sec/iter: 0.0066
+Train set (epoch 15): [38432/60000 (64%)]	Loss: 0.5377 (avg: 0.7024), other losses: ['0.4224']	Acc metric: 35546/38432 (92.49%)	 AttnAUC: ['97.39']	 avg sec/iter: 0.0068
+Train set (epoch 15): [51232/60000 (85%)]	Loss: 0.6717 (avg: 0.7022), other losses: ['0.4554']	Acc metric: 47391/51232 (92.50%)	 AttnAUC: ['97.37']	 avg sec/iter: 0.0071
+Train set (epoch 15): [60000/60000 (100%)]	Loss: 0.6327 (avg: 0.7014), other losses: ['0.5078']	Acc metric: 55516/60000 (92.53%)	 AttnAUC: ['97.38']	 avg sec/iter: 0.0075
+
+
+Train set (epoch 16): [12832/60000 (21%)]	Loss: 0.6239 (avg: 0.6908), other losses: ['0.4372']	Acc metric: 11897/12832 (92.71%)	 AttnAUC: ['97.40']	 avg sec/iter: 0.0061
+Train set (epoch 16): [25632/60000 (43%)]	Loss: 1.0661 (avg: 0.6976), other losses: ['0.4554']	Acc metric: 23727/25632 (92.57%)	 AttnAUC: ['97.38']	 avg sec/iter: 0.0065
+Train set (epoch 16): [38432/60000 (64%)]	Loss: 0.5584 (avg: 0.6974), other losses: ['0.4767']	Acc metric: 35571/38432 (92.56%)	 AttnAUC: ['97.39']	 avg sec/iter: 0.0068
+Train set (epoch 16): [51232/60000 (85%)]	Loss: 0.5482 (avg: 0.6969), other losses: ['0.4593']	Acc metric: 47410/51232 (92.54%)	 AttnAUC: ['97.37']	 avg sec/iter: 0.0071
+Train set (epoch 16): [60000/60000 (100%)]	Loss: 0.7619 (avg: 0.6963), other losses: ['0.4645']	Acc metric: 55540/60000 (92.57%)	 AttnAUC: ['97.37']	 avg sec/iter: 0.0075
+
+
+Train set (epoch 17): [12832/60000 (21%)]	Loss: 0.5990 (avg: 0.6880), other losses: ['0.4520']	Acc metric: 11922/12832 (92.91%)	 AttnAUC: ['97.40']	 avg sec/iter: 0.0061
+Train set (epoch 17): [25632/60000 (43%)]	Loss: 0.7952 (avg: 0.6936), other losses: ['0.4557']	Acc metric: 23753/25632 (92.67%)	 AttnAUC: ['97.43']	 avg sec/iter: 0.0064
+Train set (epoch 17): [38432/60000 (64%)]	Loss: 0.7221 (avg: 0.6953), other losses: ['0.4168']	Acc metric: 35612/38432 (92.66%)	 AttnAUC: ['97.44']	 avg sec/iter: 0.0067
+Train set (epoch 17): [51232/60000 (85%)]	Loss: 0.7610 (avg: 0.6914), other losses: ['0.4319']	Acc metric: 47540/51232 (92.79%)	 AttnAUC: ['97.45']	 avg sec/iter: 0.0070
+Train set (epoch 17): [60000/60000 (100%)]	Loss: 0.6668 (avg: 0.6880), other losses: ['0.4271']	Acc metric: 55734/60000 (92.89%)	 AttnAUC: ['97.47']	 avg sec/iter: 0.0074
+
+
+Train set (epoch 18): [12832/60000 (21%)]	Loss: 0.7233 (avg: 0.6778), other losses: ['0.4602']	Acc metric: 11964/12832 (93.24%)	 AttnAUC: ['97.44']	 avg sec/iter: 0.0061
+Train set (epoch 18): [25632/60000 (43%)]	Loss: 0.8066 (avg: 0.6776), other losses: ['0.4611']	Acc metric: 23870/25632 (93.13%)	 AttnAUC: ['97.41']	 avg sec/iter: 0.0064
+Train set (epoch 18): [38432/60000 (64%)]	Loss: 0.5260 (avg: 0.6830), other losses: ['0.4463']	Acc metric: 35736/38432 (92.99%)	 AttnAUC: ['97.38']	 avg sec/iter: 0.0067
+Train set (epoch 18): [51232/60000 (85%)]	Loss: 0.8198 (avg: 0.6840), other losses: ['0.4878']	Acc metric: 47618/51232 (92.95%)	 AttnAUC: ['97.43']	 avg sec/iter: 0.0070
+Train set (epoch 18): [60000/60000 (100%)]	Loss: 0.5289 (avg: 0.6823), other losses: ['0.4594']	Acc metric: 55825/60000 (93.04%)	 AttnAUC: ['97.46']	 avg sec/iter: 0.0074
+
+
+Train set (epoch 19): [12832/60000 (21%)]	Loss: 0.7655 (avg: 0.6748), other losses: ['0.4681']	Acc metric: 11952/12832 (93.14%)	 AttnAUC: ['97.51']	 avg sec/iter: 0.0061
+Train set (epoch 19): [25632/60000 (43%)]	Loss: 0.5376 (avg: 0.6714), other losses: ['0.4514']	Acc metric: 23884/25632 (93.18%)	 AttnAUC: ['97.46']	 avg sec/iter: 0.0064
+Train set (epoch 19): [38432/60000 (64%)]	Loss: 0.7254 (avg: 0.6729), other losses: ['0.4463']	Acc metric: 35806/38432 (93.17%)	 AttnAUC: ['97.46']	 avg sec/iter: 0.0067
+Train set (epoch 19): [51232/60000 (85%)]	Loss: 0.8429 (avg: 0.6757), other losses: ['0.4893']	Acc metric: 47725/51232 (93.15%)	 AttnAUC: ['97.48']	 avg sec/iter: 0.0070
+Train set (epoch 19): [60000/60000 (100%)]	Loss: 0.7220 (avg: 0.6768), other losses: ['0.4372']	Acc metric: 55892/60000 (93.15%)	 AttnAUC: ['97.48']	 avg sec/iter: 0.0074
+
+
+Train set (epoch 20): [12832/60000 (21%)]	Loss: 0.7473 (avg: 0.6665), other losses: ['0.4609']	Acc metric: 11998/12832 (93.50%)	 AttnAUC: ['97.42']	 avg sec/iter: 0.0061
+Train set (epoch 20): [25632/60000 (43%)]	Loss: 0.7746 (avg: 0.6704), other losses: ['0.4514']	Acc metric: 23957/25632 (93.47%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0064
+Train set (epoch 20): [38432/60000 (64%)]	Loss: 0.5672 (avg: 0.6708), other losses: ['0.4719']	Acc metric: 35893/38432 (93.39%)	 AttnAUC: ['97.54']	 avg sec/iter: 0.0067
+Train set (epoch 20): [51232/60000 (85%)]	Loss: 0.5983 (avg: 0.6745), other losses: ['0.4313']	Acc metric: 47823/51232 (93.35%)	 AttnAUC: ['97.56']	 avg sec/iter: 0.0070
+Train set (epoch 20): [60000/60000 (100%)]	Loss: 0.6107 (avg: 0.6732), other losses: ['0.4114']	Acc metric: 56031/60000 (93.39%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0074
+
+
+Train set (epoch 21): [12832/60000 (21%)]	Loss: 0.6733 (avg: 0.6512), other losses: ['0.4821']	Acc metric: 12085/12832 (94.18%)	 AttnAUC: ['97.38']	 avg sec/iter: 0.0061
+Train set (epoch 21): [25632/60000 (43%)]	Loss: 0.5102 (avg: 0.6412), other losses: ['0.3946']	Acc metric: 24198/25632 (94.41%)	 AttnAUC: ['97.48']	 avg sec/iter: 0.0064
+Train set (epoch 21): [38432/60000 (64%)]	Loss: 0.6988 (avg: 0.6414), other losses: ['0.4720']	Acc metric: 36259/38432 (94.35%)	 AttnAUC: ['97.51']	 avg sec/iter: 0.0067
+Train set (epoch 21): [51232/60000 (85%)]	Loss: 0.5576 (avg: 0.6387), other losses: ['0.4556']	Acc metric: 48369/51232 (94.41%)	 AttnAUC: ['97.50']	 avg sec/iter: 0.0070
+Train set (epoch 21): [60000/60000 (100%)]	Loss: 0.6037 (avg: 0.6377), other losses: ['0.4640']	Acc metric: 56659/60000 (94.43%)	 AttnAUC: ['97.50']	 avg sec/iter: 0.0074
+
+
+Train set (epoch 22): [12832/60000 (21%)]	Loss: 0.6387 (avg: 0.6287), other losses: ['0.4454']	Acc metric: 12132/12832 (94.54%)	 AttnAUC: ['97.61']	 avg sec/iter: 0.0061
+Train set (epoch 22): [25632/60000 (43%)]	Loss: 0.6445 (avg: 0.6309), other losses: ['0.4421']	Acc metric: 24256/25632 (94.63%)	 AttnAUC: ['97.58']	 avg sec/iter: 0.0064
+Train set (epoch 22): [38432/60000 (64%)]	Loss: 0.5440 (avg: 0.6328), other losses: ['0.4436']	Acc metric: 36341/38432 (94.56%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0067
+Train set (epoch 22): [51232/60000 (85%)]	Loss: 0.4962 (avg: 0.6315), other losses: ['0.4307']	Acc metric: 48479/51232 (94.63%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0070
+Train set (epoch 22): [60000/60000 (100%)]	Loss: 0.5067 (avg: 0.6315), other losses: ['0.4482']	Acc metric: 56754/60000 (94.59%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0074
+
+
+Train set (epoch 23): [12832/60000 (21%)]	Loss: 0.6023 (avg: 0.6257), other losses: ['0.4785']	Acc metric: 12180/12832 (94.92%)	 AttnAUC: ['97.58']	 avg sec/iter: 0.0061
+Train set (epoch 23): [25632/60000 (43%)]	Loss: 0.7478 (avg: 0.6299), other losses: ['0.4636']	Acc metric: 24294/25632 (94.78%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0068
+Train set (epoch 23): [38432/60000 (64%)]	Loss: 0.5407 (avg: 0.6301), other losses: ['0.4598']	Acc metric: 36407/38432 (94.73%)	 AttnAUC: ['97.51']	 avg sec/iter: 0.0073
+Train set (epoch 23): [51232/60000 (85%)]	Loss: 0.7105 (avg: 0.6296), other losses: ['0.4371']	Acc metric: 48517/51232 (94.70%)	 AttnAUC: ['97.51']	 avg sec/iter: 0.0083
+Train set (epoch 23): [60000/60000 (100%)]	Loss: 0.7438 (avg: 0.6296), other losses: ['0.4922']	Acc metric: 56815/60000 (94.69%)	 AttnAUC: ['97.52']	 avg sec/iter: 0.0090
+
+
+Train set (epoch 24): [12832/60000 (21%)]	Loss: 0.6613 (avg: 0.6283), other losses: ['0.4418']	Acc metric: 12166/12832 (94.81%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0102
+Train set (epoch 24): [25632/60000 (43%)]	Loss: 0.6409 (avg: 0.6266), other losses: ['0.4713']	Acc metric: 24301/25632 (94.81%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0099
+Train set (epoch 24): [38432/60000 (64%)]	Loss: 0.4736 (avg: 0.6269), other losses: ['0.4257']	Acc metric: 36422/38432 (94.77%)	 AttnAUC: ['97.54']	 avg sec/iter: 0.0097
+Train set (epoch 24): [51232/60000 (85%)]	Loss: 0.6167 (avg: 0.6290), other losses: ['0.4429']	Acc metric: 48509/51232 (94.68%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0094
+Train set (epoch 24): [60000/60000 (100%)]	Loss: 0.6315 (avg: 0.6288), other losses: ['0.4588']	Acc metric: 56790/60000 (94.65%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0096
+
+
+Train set (epoch 25): [12832/60000 (21%)]	Loss: 0.5464 (avg: 0.6250), other losses: ['0.4438']	Acc metric: 12175/12832 (94.88%)	 AttnAUC: ['97.50']	 avg sec/iter: 0.0070
+Train set (epoch 25): [25632/60000 (43%)]	Loss: 0.8375 (avg: 0.6247), other losses: ['0.4670']	Acc metric: 24289/25632 (94.76%)	 AttnAUC: ['97.56']	 avg sec/iter: 0.0072
+Train set (epoch 25): [38432/60000 (64%)]	Loss: 0.5744 (avg: 0.6238), other losses: ['0.4145']	Acc metric: 36431/38432 (94.79%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0075
+Train set (epoch 25): [51232/60000 (85%)]	Loss: 0.6876 (avg: 0.6247), other losses: ['0.4523']	Acc metric: 48547/51232 (94.76%)	 AttnAUC: ['97.54']	 avg sec/iter: 0.0077
+Train set (epoch 25): [60000/60000 (100%)]	Loss: 0.7088 (avg: 0.6261), other losses: ['0.4828']	Acc metric: 56834/60000 (94.72%)	 AttnAUC: ['97.53']	 avg sec/iter: 0.0080
+
+
+Train set (epoch 26): [12832/60000 (21%)]	Loss: 0.5545 (avg: 0.6288), other losses: ['0.4428']	Acc metric: 12126/12832 (94.50%)	 AttnAUC: ['97.45']	 avg sec/iter: 0.0063
+Train set (epoch 26): [25632/60000 (43%)]	Loss: 0.5319 (avg: 0.6296), other losses: ['0.4472']	Acc metric: 24262/25632 (94.66%)	 AttnAUC: ['97.50']	 avg sec/iter: 0.0065
+Train set (epoch 26): [38432/60000 (64%)]	Loss: 0.5725 (avg: 0.6258), other losses: ['0.4729']	Acc metric: 36443/38432 (94.82%)	 AttnAUC: ['97.53']	 avg sec/iter: 0.0067
+Train set (epoch 26): [51232/60000 (85%)]	Loss: 0.5732 (avg: 0.6256), other losses: ['0.4459']	Acc metric: 48575/51232 (94.81%)	 AttnAUC: ['97.54']	 avg sec/iter: 0.0070
+Train set (epoch 26): [60000/60000 (100%)]	Loss: 0.6358 (avg: 0.6243), other losses: ['0.4261']	Acc metric: 56908/60000 (94.85%)	 AttnAUC: ['97.54']	 avg sec/iter: 0.0074
+
+
+Train set (epoch 27): [12832/60000 (21%)]	Loss: 0.6600 (avg: 0.6216), other losses: ['0.4518']	Acc metric: 12164/12832 (94.79%)	 AttnAUC: ['97.51']	 avg sec/iter: 0.0067
+Train set (epoch 27): [25632/60000 (43%)]	Loss: 0.6405 (avg: 0.6221), other losses: ['0.4730']	Acc metric: 24292/25632 (94.77%)	 AttnAUC: ['97.53']	 avg sec/iter: 0.0072
+Train set (epoch 27): [38432/60000 (64%)]	Loss: 0.4906 (avg: 0.6207), other losses: ['0.4275']	Acc metric: 36473/38432 (94.90%)	 AttnAUC: ['97.54']	 avg sec/iter: 0.0074
+Train set (epoch 27): [51232/60000 (85%)]	Loss: 0.5851 (avg: 0.6208), other losses: ['0.4725']	Acc metric: 48646/51232 (94.95%)	 AttnAUC: ['97.54']	 avg sec/iter: 0.0079
+Train set (epoch 27): [60000/60000 (100%)]	Loss: 0.5342 (avg: 0.6225), other losses: ['0.4636']	Acc metric: 56936/60000 (94.89%)	 AttnAUC: ['97.54']	 avg sec/iter: 0.0083
+
+
+Train set (epoch 28): [12832/60000 (21%)]	Loss: 0.5154 (avg: 0.6250), other losses: ['0.4598']	Acc metric: 12144/12832 (94.64%)	 AttnAUC: ['97.54']	 avg sec/iter: 0.0062
+Train set (epoch 28): [25632/60000 (43%)]	Loss: 0.5164 (avg: 0.6252), other losses: ['0.4435']	Acc metric: 24258/25632 (94.64%)	 AttnAUC: ['97.52']	 avg sec/iter: 0.0069
+Train set (epoch 28): [38432/60000 (64%)]	Loss: 0.6900 (avg: 0.6256), other losses: ['0.4438']	Acc metric: 36401/38432 (94.72%)	 AttnAUC: ['97.53']	 avg sec/iter: 0.0075
+Train set (epoch 28): [51232/60000 (85%)]	Loss: 0.6726 (avg: 0.6231), other losses: ['0.4782']	Acc metric: 48579/51232 (94.82%)	 AttnAUC: ['97.54']	 avg sec/iter: 0.0077
+Train set (epoch 28): [60000/60000 (100%)]	Loss: 0.7410 (avg: 0.6223), other losses: ['0.4283']	Acc metric: 56915/60000 (94.86%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0080
+
+
+Train set (epoch 29): [12832/60000 (21%)]	Loss: 0.4748 (avg: 0.6309), other losses: ['0.4328']	Acc metric: 12157/12832 (94.74%)	 AttnAUC: ['97.64']	 avg sec/iter: 0.0061
+Train set (epoch 29): [25632/60000 (43%)]	Loss: 0.5261 (avg: 0.6256), other losses: ['0.4501']	Acc metric: 24336/25632 (94.94%)	 AttnAUC: ['97.61']	 avg sec/iter: 0.0069
+Train set (epoch 29): [38432/60000 (64%)]	Loss: 0.6877 (avg: 0.6223), other losses: ['0.4372']	Acc metric: 36510/38432 (95.00%)	 AttnAUC: ['97.58']	 avg sec/iter: 0.0070
+Train set (epoch 29): [51232/60000 (85%)]	Loss: 0.4991 (avg: 0.6226), other losses: ['0.4351']	Acc metric: 48637/51232 (94.93%)	 AttnAUC: ['97.58']	 avg sec/iter: 0.0072
+Train set (epoch 29): [60000/60000 (100%)]	Loss: 0.5673 (avg: 0.6210), other losses: ['0.4386']	Acc metric: 56984/60000 (94.97%)	 AttnAUC: ['97.57']	 avg sec/iter: 0.0076
+
+
+Train set (epoch 30): [12832/60000 (21%)]	Loss: 0.5926 (avg: 0.6255), other losses: ['0.4583']	Acc metric: 12152/12832 (94.70%)	 AttnAUC: ['97.54']	 avg sec/iter: 0.0070
+Train set (epoch 30): [25632/60000 (43%)]	Loss: 0.6972 (avg: 0.6239), other losses: ['0.4513']	Acc metric: 24293/25632 (94.78%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0068
+Train set (epoch 30): [38432/60000 (64%)]	Loss: 0.5203 (avg: 0.6194), other losses: ['0.4468']	Acc metric: 36498/38432 (94.97%)	 AttnAUC: ['97.56']	 avg sec/iter: 0.0072
+Train set (epoch 30): [51232/60000 (85%)]	Loss: 0.7413 (avg: 0.6181), other losses: ['0.4601']	Acc metric: 48661/51232 (94.98%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0077
+Train set (epoch 30): [60000/60000 (100%)]	Loss: 0.7105 (avg: 0.6189), other losses: ['0.4418']	Acc metric: 56985/60000 (94.97%)	 AttnAUC: ['97.55']	 avg sec/iter: 0.0082
+
+
+saving the model to ./checkpoints//checkpoint_mnist-75sp_065802_epoch30_seed0000111.pth.tar
+lbl: 0, avg acc: 98.50% (5834/5923)
+lbl: 1, avg acc: 98.16% (6618/6742)
+lbl: 2, avg acc: 96.78% (5766/5958)
+lbl: 3, avg acc: 94.81% (5813/6131)
+lbl: 4, avg acc: 95.33% (5569/5842)
+lbl: 5, avg acc: 95.59% (5182/5421)
+lbl: 6, avg acc: 98.11% (5806/5918)
+lbl: 7, avg acc: 96.12% (6022/6265)
+lbl: 8, avg acc: 95.40% (5582/5851)
+lbl: 9, avg acc: 94.13% (5600/5949)
+0 <= N_nodes <= 100000.0 (min=40, max=75), avg acc: 96.32% (57792/60000)
+Train set (epoch 30): Avg loss: 0.1233, Acc metric: 57792/60000 (96.32%)	 AttnAUC: ['97.57']	 avg sec/iter: 0.0083
+
+lbl: 0, avg acc: 98.57% (966/980)
+lbl: 1, avg acc: 98.85% (1122/1135)
+lbl: 2, avg acc: 96.22% (993/1032)
+lbl: 3, avg acc: 95.94% (969/1010)
+lbl: 4, avg acc: 94.40% (927/982)
+lbl: 5, avg acc: 95.85% (855/892)
+lbl: 6, avg acc: 96.87% (928/958)
+lbl: 7, avg acc: 95.14% (978/1028)
+lbl: 8, avg acc: 96.20% (937/974)
+lbl: 9, avg acc: 94.15% (950/1009)
+0 <= N_nodes <= 100000.0 (min=42, max=75), avg acc: 96.25% (9625/10000)
+Test set (epoch 30): Avg loss: 0.1256, Acc metric: 9625/10000 (96.25%)	 AttnAUC: ['97.54']	 avg sec/iter: 0.0076
+
+lbl: 0, avg acc: 94.18% (923/980)
+lbl: 1, avg acc: 87.84% (997/1135)
+lbl: 2, avg acc: 90.99% (939/1032)
+lbl: 3, avg acc: 87.43% (883/1010)
+lbl: 4, avg acc: 82.28% (808/982)
+lbl: 5, avg acc: 92.83% (828/892)
+lbl: 6, avg acc: 85.70% (821/958)
+lbl: 7, avg acc: 89.11% (916/1028)
+lbl: 8, avg acc: 88.71% (864/974)
+lbl: 9, avg acc: 79.19% (799/1009)
+0 <= N_nodes <= 100000.0 (min=42, max=75), avg acc: 87.78% (8778/10000)
+Test set (epoch 30): Avg loss: 0.3712, Acc metric: 8778/10000 (87.78%)	 AttnAUC: ['96.91']	 avg sec/iter: 0.0077
+
+lbl: 0, avg acc: 96.33% (944/980)
+lbl: 1, avg acc: 94.63% (1074/1135)
+lbl: 2, avg acc: 92.34% (953/1032)
+lbl: 3, avg acc: 91.09% (920/1010)
+lbl: 4, avg acc: 88.80% (872/982)
+lbl: 5, avg acc: 93.61% (835/892)
+lbl: 6, avg acc: 91.13% (873/958)
+lbl: 7, avg acc: 91.93% (945/1028)
+lbl: 8, avg acc: 92.51% (901/974)
+lbl: 9, avg acc: 83.75% (845/1009)
+0 <= N_nodes <= 100000.0 (min=42, max=75), avg acc: 91.62% (9162/10000)
+Test set (epoch 30): Avg loss: 0.2762, Acc metric: 9162/10000 (91.62%)	 AttnAUC: ['97.06']	 avg sec/iter: 0.0078
+
+done in 0:08:53.435537

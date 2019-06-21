@@ -1,0 +1,1304 @@
+start time: 2019-06-20 20:38:32.820601
+gpus:  1
+dataset mnist-75sp
+data_dir ./data
+epochs 30
+batch_size 32
+lr 0.001
+lr_decay_step [20, 25]
+wdecay 0.0001
+dropout 0.5
+filters [4, 64, 512]
+filter_scale 4
+n_hidden 0
+aggregation mean
+readout max
+kl_weight 100.0
+pool None
+pool_arch ['fc', 'prev']
+n_nodes 25
+cv_folds 5
+img_features ['mean', 'coord']
+img_noise_levels [0.4, 0.6]
+validation False
+debug False
+eval_attn_train True
+eval_attn_test True
+test_batch_size 100
+alpha_ws None
+log_interval 400
+results ./checkpoints/
+resume None
+device cuda
+seed 111
+threads 0
+experiment_ID:  820601
+loading noise from ./data/mnist_75sp_noise.pt
+loading noise from ./data/mnist_75sp_color_noise.pt
+precompute all data for the TRAIN set...
+precompute all data for the TEST set...
+ChebyGINLayer torch.Size([4, 20]) tensor([0.5133, 0.5007, 0.6548, 0.5493], grad_fn=<SliceBackward>)
+ChebyGINLayer torch.Size([64, 16]) tensor([0.5050, 0.5075, 0.6239, 0.5647, 0.4541, 0.6228, 0.5159, 0.6019, 0.4718,
+        0.4111], grad_fn=<SliceBackward>)
+ChebyGINLayer torch.Size([512, 256]) tensor([0.5921, 0.5888, 0.5684, 0.5909, 0.5642, 0.5623, 0.5746, 0.5915, 0.5780,
+        0.5916], grad_fn=<SliceBackward>)
+ChebyGIN(
+  (graph_layers): Sequential(
+    (0): ChebyGINLayer(in_features=5, out_features=4, K=4, n_hidden=0, aggregation=mean)
+    fc=Sequential(
+      (0): Linear(in_features=20, out_features=4, bias=True)
+      (1): ReLU(inplace)
+    )
+    (1): ChebyGINLayer(in_features=4, out_features=64, K=4, n_hidden=0, aggregation=mean)
+    fc=Sequential(
+      (0): Linear(in_features=16, out_features=64, bias=True)
+      (1): ReLU(inplace)
+    )
+    (2): ChebyGINLayer(in_features=64, out_features=512, K=4, n_hidden=0, aggregation=mean)
+    fc=Sequential(
+      (0): Linear(in_features=256, out_features=512, bias=True)
+      (1): ReLU(inplace)
+    )
+    (3): GraphReadout(max)
+  )
+  (fc): Sequential(
+    (0): Dropout(p=0.5)
+    (1): Linear(in_features=512, out_features=10, bias=True)
+  )
+)
+model capacity: 137886
+computing mean and std of input features
+features shape loaded torch.Size([2404704, 5])
+mn [[0.11225057 0.11225057 0.11225057 0.44206527 0.43950436]]
+std [[0.2721889  0.2721889  0.2721889  0.2987583  0.30080357]]
+corrected (non zeros) std [[0.2721889  0.2721889  0.2721889  0.2987583  0.30080357]]
+model is checked for nodes shuffling
+Train set (epoch 1): [12832/60000 (21%)]	Loss: 0.8299 (avg: 1.4233), other losses: []	Acc metric: 6637/12832 (51.72%)	 AttnAUC: []	 avg sec/iter: 0.0069
+Train set (epoch 1): [25632/60000 (43%)]	Loss: 0.7672 (avg: 1.0862), other losses: []	Acc metric: 16334/25632 (63.73%)	 AttnAUC: []	 avg sec/iter: 0.0066
+Train set (epoch 1): [38432/60000 (64%)]	Loss: 0.3296 (avg: 0.9150), other losses: []	Acc metric: 26815/38432 (69.77%)	 AttnAUC: []	 avg sec/iter: 0.0071
+Train set (epoch 1): [51232/60000 (85%)]	Loss: 0.2199 (avg: 0.8043), other losses: []	Acc metric: 37693/51232 (73.57%)	 AttnAUC: []	 avg sec/iter: 0.0071
+Train set (epoch 1): [60000/60000 (100%)]	Loss: 0.7561 (avg: 0.7507), other losses: []	Acc metric: 45245/60000 (75.41%)	 AttnAUC: []	 avg sec/iter: 0.0070
+
+
+saving the model to ./checkpoints//checkpoint_mnist-75sp_820601_epoch1_seed0000111.pth.tar
+model is checked for nodes shuffling
+lbl: 0, avg acc: 96.44% (5712/5923)
+lbl: 1, avg acc: 97.06% (6544/6742)
+lbl: 2, avg acc: 85.28% (5081/5958)
+lbl: 3, avg acc: 87.62% (5372/6131)
+lbl: 4, avg acc: 82.37% (4812/5842)
+lbl: 5, avg acc: 84.74% (4594/5421)
+lbl: 6, avg acc: 97.08% (5745/5918)
+lbl: 7, avg acc: 86.61% (5426/6265)
+lbl: 8, avg acc: 89.13% (5215/5851)
+lbl: 9, avg acc: 90.70% (5396/5949)
+0 <= N_nodes <= 100000.0 (min=40, max=75), avg acc: 89.83% (53897/60000)
+Train set (epoch 1): Avg loss: 0.3263, Acc metric: 53897/60000 (89.83%)	 AttnAUC: []	 avg sec/iter: 0.0083
+
+model is checked for nodes shuffling
+lbl: 0, avg acc: 97.14% (952/980)
+lbl: 1, avg acc: 97.36% (1105/1135)
+lbl: 2, avg acc: 86.43% (892/1032)
+lbl: 3, avg acc: 90.00% (909/1010)
+lbl: 4, avg acc: 84.42% (829/982)
+lbl: 5, avg acc: 84.42% (753/892)
+lbl: 6, avg acc: 96.56% (925/958)
+lbl: 7, avg acc: 85.41% (878/1028)
+lbl: 8, avg acc: 88.91% (866/974)
+lbl: 9, avg acc: 89.69% (905/1009)
+0 <= N_nodes <= 100000.0 (min=42, max=75), avg acc: 90.14% (9014/10000)
+Test set (epoch 1): Avg loss: 0.3165, Acc metric: 9014/10000 (90.14%)	 AttnAUC: []	 avg sec/iter: 0.0101
+
+model is checked for nodes shuffling
+lbl: 0, avg acc: 89.59% (878/980)
+lbl: 1, avg acc: 66.43% (754/1135)
+lbl: 2, avg acc: 77.03% (795/1032)
+lbl: 3, avg acc: 78.22% (790/1010)
+lbl: 4, avg acc: 42.77% (420/982)
+lbl: 5, avg acc: 81.28% (725/892)
+lbl: 6, avg acc: 88.94% (852/958)
+lbl: 7, avg acc: 71.98% (740/1028)
+lbl: 8, avg acc: 87.06% (848/974)
+lbl: 9, avg acc: 65.91% (665/1009)
+0 <= N_nodes <= 100000.0 (min=42, max=75), avg acc: 74.67% (7467/10000)
+Test set (epoch 1): Avg loss: 0.7629, Acc metric: 7467/10000 (74.67%)	 AttnAUC: []	 avg sec/iter: 0.0094
+
+model is checked for nodes shuffling
+lbl: 0, avg acc: 90.82% (890/980)
+lbl: 1, avg acc: 79.21% (899/1135)
+lbl: 2, avg acc: 77.33% (798/1032)
+lbl: 3, avg acc: 82.28% (831/1010)
+lbl: 4, avg acc: 51.12% (502/982)
+lbl: 5, avg acc: 82.85% (739/892)
+lbl: 6, avg acc: 91.44% (876/958)
+lbl: 7, avg acc: 77.04% (792/1028)
+lbl: 8, avg acc: 86.34% (841/974)
+lbl: 9, avg acc: 73.24% (739/1009)
+0 <= N_nodes <= 100000.0 (min=42, max=75), avg acc: 79.07% (7907/10000)
+Test set (epoch 1): Avg loss: 0.6569, Acc metric: 7907/10000 (79.07%)	 AttnAUC: []	 avg sec/iter: 0.0101
+
+Train set (epoch 2): [12832/60000 (21%)]	Loss: 0.2598 (avg: 0.3917), other losses: []	Acc metric: 11281/12832 (87.91%)	 AttnAUC: []	 avg sec/iter: 0.0055
+Train set (epoch 2): [25632/60000 (43%)]	Loss: 0.3402 (avg: 0.3874), other losses: []	Acc metric: 22533/25632 (87.91%)	 AttnAUC: []	 avg sec/iter: 0.0058
+Train set (epoch 2): [38432/60000 (64%)]	Loss: 0.1574 (avg: 0.3785), other losses: []	Acc metric: 33836/38432 (88.04%)	 AttnAUC: []	 avg sec/iter: 0.0056
+Train set (epoch 2): [51232/60000 (85%)]	Loss: 0.4743 (avg: 0.3699), other losses: []	Acc metric: 45260/51232 (88.34%)	 AttnAUC: []	 avg sec/iter: 0.0056
+Train set (epoch 2): [60000/60000 (100%)]	Loss: 0.3438 (avg: 0.3652), other losses: []	Acc metric: 53079/60000 (88.47%)	 AttnAUC: []	 avg sec/iter: 0.0055
+
+
+Train set (epoch 3): [12832/60000 (21%)]	Loss: 0.1723 (avg: 0.3143), other losses: []	Acc metric: 11584/12832 (90.27%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 3): [25632/60000 (43%)]	Loss: 0.1387 (avg: 0.3056), other losses: []	Acc metric: 23173/25632 (90.41%)	 AttnAUC: []	 avg sec/iter: 0.0050
+Train set (epoch 3): [38432/60000 (64%)]	Loss: 0.3875 (avg: 0.3005), other losses: []	Acc metric: 34831/38432 (90.63%)	 AttnAUC: []	 avg sec/iter: 0.0050
+Train set (epoch 3): [51232/60000 (85%)]	Loss: 0.1694 (avg: 0.2959), other losses: []	Acc metric: 46484/51232 (90.73%)	 AttnAUC: []	 avg sec/iter: 0.0052
+Train set (epoch 3): [60000/60000 (100%)]	Loss: 0.2557 (avg: 0.2935), other losses: []	Acc metric: 54460/60000 (90.77%)	 AttnAUC: []	 avg sec/iter: 0.0055
+
+
+Train set (epoch 4): [12832/60000 (21%)]	Loss: 0.1625 (avg: 0.2712), other losses: []	Acc metric: 11758/12832 (91.63%)	 AttnAUC: []	 avg sec/iter: 0.0052
+Train set (epoch 4): [25632/60000 (43%)]	Loss: 0.3016 (avg: 0.2642), other losses: []	Acc metric: 23535/25632 (91.82%)	 AttnAUC: []	 avg sec/iter: 0.0056
+Train set (epoch 4): [38432/60000 (64%)]	Loss: 0.3386 (avg: 0.2652), other losses: []	Acc metric: 35257/38432 (91.74%)	 AttnAUC: []	 avg sec/iter: 0.0056
+Train set (epoch 4): [51232/60000 (85%)]	Loss: 0.3056 (avg: 0.2641), other losses: []	Acc metric: 46997/51232 (91.73%)	 AttnAUC: []	 avg sec/iter: 0.0056
+Train set (epoch 4): [60000/60000 (100%)]	Loss: 0.2339 (avg: 0.2621), other losses: []	Acc metric: 55076/60000 (91.79%)	 AttnAUC: []	 avg sec/iter: 0.0056
+
+
+Train set (epoch 5): [12832/60000 (21%)]	Loss: 0.1488 (avg: 0.2321), other losses: []	Acc metric: 11896/12832 (92.71%)	 AttnAUC: []	 avg sec/iter: 0.0051
+Train set (epoch 5): [25632/60000 (43%)]	Loss: 0.3731 (avg: 0.2320), other losses: []	Acc metric: 23762/25632 (92.70%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 5): [38432/60000 (64%)]	Loss: 0.2574 (avg: 0.2328), other losses: []	Acc metric: 35644/38432 (92.75%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 5): [51232/60000 (85%)]	Loss: 0.1837 (avg: 0.2330), other losses: []	Acc metric: 47470/51232 (92.66%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 5): [60000/60000 (100%)]	Loss: 0.3037 (avg: 0.2335), other losses: []	Acc metric: 55596/60000 (92.66%)	 AttnAUC: []	 avg sec/iter: 0.0049
+
+
+Train set (epoch 6): [12832/60000 (21%)]	Loss: 0.2572 (avg: 0.2192), other losses: []	Acc metric: 11947/12832 (93.10%)	 AttnAUC: []	 avg sec/iter: 0.0048
+Train set (epoch 6): [25632/60000 (43%)]	Loss: 0.2230 (avg: 0.2183), other losses: []	Acc metric: 23852/25632 (93.06%)	 AttnAUC: []	 avg sec/iter: 0.0048
+Train set (epoch 6): [38432/60000 (64%)]	Loss: 0.2142 (avg: 0.2188), other losses: []	Acc metric: 35788/38432 (93.12%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 6): [51232/60000 (85%)]	Loss: 0.3098 (avg: 0.2191), other losses: []	Acc metric: 47708/51232 (93.12%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 6): [60000/60000 (100%)]	Loss: 0.2321 (avg: 0.2186), other losses: []	Acc metric: 55864/60000 (93.11%)	 AttnAUC: []	 avg sec/iter: 0.0050
+
+
+Train set (epoch 7): [12832/60000 (21%)]	Loss: 0.1527 (avg: 0.2110), other losses: []	Acc metric: 12010/12832 (93.59%)	 AttnAUC: []	 avg sec/iter: 0.0050
+Train set (epoch 7): [25632/60000 (43%)]	Loss: 0.3164 (avg: 0.2087), other losses: []	Acc metric: 23994/25632 (93.61%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 7): [38432/60000 (64%)]	Loss: 0.0601 (avg: 0.2079), other losses: []	Acc metric: 35957/38432 (93.56%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 7): [51232/60000 (85%)]	Loss: 0.1113 (avg: 0.2074), other losses: []	Acc metric: 47905/51232 (93.51%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 7): [60000/60000 (100%)]	Loss: 0.0890 (avg: 0.2049), other losses: []	Acc metric: 56147/60000 (93.58%)	 AttnAUC: []	 avg sec/iter: 0.0049
+
+
+Train set (epoch 8): [12832/60000 (21%)]	Loss: 0.0723 (avg: 0.1960), other losses: []	Acc metric: 12047/12832 (93.88%)	 AttnAUC: []	 avg sec/iter: 0.0051
+Train set (epoch 8): [25632/60000 (43%)]	Loss: 0.0534 (avg: 0.1972), other losses: []	Acc metric: 24053/25632 (93.84%)	 AttnAUC: []	 avg sec/iter: 0.0067
+Train set (epoch 8): [38432/60000 (64%)]	Loss: 0.2780 (avg: 0.1990), other losses: []	Acc metric: 36026/38432 (93.74%)	 AttnAUC: []	 avg sec/iter: 0.0074
+Train set (epoch 8): [51232/60000 (85%)]	Loss: 0.2570 (avg: 0.1978), other losses: []	Acc metric: 48017/51232 (93.72%)	 AttnAUC: []	 avg sec/iter: 0.0069
+Train set (epoch 8): [60000/60000 (100%)]	Loss: 0.2110 (avg: 0.1976), other losses: []	Acc metric: 56238/60000 (93.73%)	 AttnAUC: []	 avg sec/iter: 0.0068
+
+
+Train set (epoch 9): [12832/60000 (21%)]	Loss: 0.0615 (avg: 0.1801), other losses: []	Acc metric: 12132/12832 (94.54%)	 AttnAUC: []	 avg sec/iter: 0.0066
+Train set (epoch 9): [25632/60000 (43%)]	Loss: 0.0390 (avg: 0.1861), other losses: []	Acc metric: 24134/25632 (94.16%)	 AttnAUC: []	 avg sec/iter: 0.0066
+Train set (epoch 9): [38432/60000 (64%)]	Loss: 0.1963 (avg: 0.1862), other losses: []	Acc metric: 36188/38432 (94.16%)	 AttnAUC: []	 avg sec/iter: 0.0062
+Train set (epoch 9): [51232/60000 (85%)]	Loss: 0.3630 (avg: 0.1879), other losses: []	Acc metric: 48228/51232 (94.14%)	 AttnAUC: []	 avg sec/iter: 0.0061
+Train set (epoch 9): [60000/60000 (100%)]	Loss: 0.0708 (avg: 0.1899), other losses: []	Acc metric: 56443/60000 (94.07%)	 AttnAUC: []	 avg sec/iter: 0.0064
+
+
+Train set (epoch 10): [12832/60000 (21%)]	Loss: 0.0897 (avg: 0.1821), other losses: []	Acc metric: 12090/12832 (94.22%)	 AttnAUC: []	 avg sec/iter: 0.0059
+Train set (epoch 10): [25632/60000 (43%)]	Loss: 0.0995 (avg: 0.1830), other losses: []	Acc metric: 24147/25632 (94.21%)	 AttnAUC: []	 avg sec/iter: 0.0058
+Train set (epoch 10): [38432/60000 (64%)]	Loss: 0.1634 (avg: 0.1856), other losses: []	Acc metric: 36178/38432 (94.14%)	 AttnAUC: []	 avg sec/iter: 0.0056
+Train set (epoch 10): [51232/60000 (85%)]	Loss: 0.1730 (avg: 0.1853), other losses: []	Acc metric: 48271/51232 (94.22%)	 AttnAUC: []	 avg sec/iter: 0.0057
+Train set (epoch 10): [60000/60000 (100%)]	Loss: 0.0850 (avg: 0.1818), other losses: []	Acc metric: 56591/60000 (94.32%)	 AttnAUC: []	 avg sec/iter: 0.0059
+
+
+Train set (epoch 11): [12832/60000 (21%)]	Loss: 0.0676 (avg: 0.1785), other losses: []	Acc metric: 12097/12832 (94.27%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 11): [25632/60000 (43%)]	Loss: 0.0957 (avg: 0.1778), other losses: []	Acc metric: 24168/25632 (94.29%)	 AttnAUC: []	 avg sec/iter: 0.0057
+Train set (epoch 11): [38432/60000 (64%)]	Loss: 0.4212 (avg: 0.1772), other losses: []	Acc metric: 36241/38432 (94.30%)	 AttnAUC: []	 avg sec/iter: 0.0056
+Train set (epoch 11): [51232/60000 (85%)]	Loss: 0.3942 (avg: 0.1755), other losses: []	Acc metric: 48321/51232 (94.32%)	 AttnAUC: []	 avg sec/iter: 0.0056
+Train set (epoch 11): [60000/60000 (100%)]	Loss: 0.0733 (avg: 0.1778), other losses: []	Acc metric: 56582/60000 (94.30%)	 AttnAUC: []	 avg sec/iter: 0.0055
+
+
+Train set (epoch 12): [12832/60000 (21%)]	Loss: 0.4358 (avg: 0.1758), other losses: []	Acc metric: 12148/12832 (94.67%)	 AttnAUC: []	 avg sec/iter: 0.0061
+Train set (epoch 12): [25632/60000 (43%)]	Loss: 0.3988 (avg: 0.1749), other losses: []	Acc metric: 24265/25632 (94.67%)	 AttnAUC: []	 avg sec/iter: 0.0057
+Train set (epoch 12): [38432/60000 (64%)]	Loss: 0.1673 (avg: 0.1712), other losses: []	Acc metric: 36396/38432 (94.70%)	 AttnAUC: []	 avg sec/iter: 0.0055
+Train set (epoch 12): [51232/60000 (85%)]	Loss: 0.1857 (avg: 0.1719), other losses: []	Acc metric: 48503/51232 (94.67%)	 AttnAUC: []	 avg sec/iter: 0.0058
+Train set (epoch 12): [60000/60000 (100%)]	Loss: 0.2963 (avg: 0.1730), other losses: []	Acc metric: 56768/60000 (94.61%)	 AttnAUC: []	 avg sec/iter: 0.0057
+
+
+Train set (epoch 13): [12832/60000 (21%)]	Loss: 0.1412 (avg: 0.1611), other losses: []	Acc metric: 12198/12832 (95.06%)	 AttnAUC: []	 avg sec/iter: 0.0051
+Train set (epoch 13): [25632/60000 (43%)]	Loss: 0.0397 (avg: 0.1620), other losses: []	Acc metric: 24335/25632 (94.94%)	 AttnAUC: []	 avg sec/iter: 0.0052
+Train set (epoch 13): [38432/60000 (64%)]	Loss: 0.0396 (avg: 0.1663), other losses: []	Acc metric: 36418/38432 (94.76%)	 AttnAUC: []	 avg sec/iter: 0.0052
+Train set (epoch 13): [51232/60000 (85%)]	Loss: 0.2959 (avg: 0.1684), other losses: []	Acc metric: 48497/51232 (94.66%)	 AttnAUC: []	 avg sec/iter: 0.0052
+Train set (epoch 13): [60000/60000 (100%)]	Loss: 0.1079 (avg: 0.1682), other losses: []	Acc metric: 56799/60000 (94.67%)	 AttnAUC: []	 avg sec/iter: 0.0053
+
+
+Train set (epoch 14): [12832/60000 (21%)]	Loss: 0.1122 (avg: 0.1552), other losses: []	Acc metric: 12194/12832 (95.03%)	 AttnAUC: []	 avg sec/iter: 0.0064
+Train set (epoch 14): [25632/60000 (43%)]	Loss: 0.0166 (avg: 0.1595), other losses: []	Acc metric: 24343/25632 (94.97%)	 AttnAUC: []	 avg sec/iter: 0.0065
+Train set (epoch 14): [38432/60000 (64%)]	Loss: 0.0185 (avg: 0.1630), other losses: []	Acc metric: 36463/38432 (94.88%)	 AttnAUC: []	 avg sec/iter: 0.0065
+Train set (epoch 14): [51232/60000 (85%)]	Loss: 0.4310 (avg: 0.1658), other losses: []	Acc metric: 48575/51232 (94.81%)	 AttnAUC: []	 avg sec/iter: 0.0066
+Train set (epoch 14): [60000/60000 (100%)]	Loss: 0.0450 (avg: 0.1643), other losses: []	Acc metric: 56893/60000 (94.82%)	 AttnAUC: []	 avg sec/iter: 0.0068
+
+
+Train set (epoch 15): [12832/60000 (21%)]	Loss: 0.1077 (avg: 0.1658), other losses: []	Acc metric: 12132/12832 (94.54%)	 AttnAUC: []	 avg sec/iter: 0.0082
+Train set (epoch 15): [25632/60000 (43%)]	Loss: 0.0609 (avg: 0.1618), other losses: []	Acc metric: 24296/25632 (94.79%)	 AttnAUC: []	 avg sec/iter: 0.0069
+Train set (epoch 15): [38432/60000 (64%)]	Loss: 0.1251 (avg: 0.1626), other losses: []	Acc metric: 36429/38432 (94.79%)	 AttnAUC: []	 avg sec/iter: 0.0066
+Train set (epoch 15): [51232/60000 (85%)]	Loss: 0.3471 (avg: 0.1632), other losses: []	Acc metric: 48530/51232 (94.73%)	 AttnAUC: []	 avg sec/iter: 0.0063
+Train set (epoch 15): [60000/60000 (100%)]	Loss: 0.1099 (avg: 0.1629), other losses: []	Acc metric: 56856/60000 (94.76%)	 AttnAUC: []	 avg sec/iter: 0.0063
+
+
+Train set (epoch 16): [12832/60000 (21%)]	Loss: 0.0573 (avg: 0.1523), other losses: []	Acc metric: 12188/12832 (94.98%)	 AttnAUC: []	 avg sec/iter: 0.0060
+Train set (epoch 16): [25632/60000 (43%)]	Loss: 0.2189 (avg: 0.1562), other losses: []	Acc metric: 24338/25632 (94.95%)	 AttnAUC: []	 avg sec/iter: 0.0060
+Train set (epoch 16): [38432/60000 (64%)]	Loss: 0.1906 (avg: 0.1564), other losses: []	Acc metric: 36526/38432 (95.04%)	 AttnAUC: []	 avg sec/iter: 0.0059
+Train set (epoch 16): [51232/60000 (85%)]	Loss: 0.2113 (avg: 0.1564), other losses: []	Acc metric: 48664/51232 (94.99%)	 AttnAUC: []	 avg sec/iter: 0.0056
+Train set (epoch 16): [60000/60000 (100%)]	Loss: 0.1088 (avg: 0.1565), other losses: []	Acc metric: 56975/60000 (94.96%)	 AttnAUC: []	 avg sec/iter: 0.0058
+
+
+Train set (epoch 17): [12832/60000 (21%)]	Loss: 0.2680 (avg: 0.1547), other losses: []	Acc metric: 12189/12832 (94.99%)	 AttnAUC: []	 avg sec/iter: 0.0055
+Train set (epoch 17): [25632/60000 (43%)]	Loss: 0.1586 (avg: 0.1570), other losses: []	Acc metric: 24345/25632 (94.98%)	 AttnAUC: []	 avg sec/iter: 0.0059
+Train set (epoch 17): [38432/60000 (64%)]	Loss: 0.0865 (avg: 0.1578), other losses: []	Acc metric: 36493/38432 (94.95%)	 AttnAUC: []	 avg sec/iter: 0.0062
+Train set (epoch 17): [51232/60000 (85%)]	Loss: 0.0619 (avg: 0.1572), other losses: []	Acc metric: 48660/51232 (94.98%)	 AttnAUC: []	 avg sec/iter: 0.0062
+Train set (epoch 17): [60000/60000 (100%)]	Loss: 0.2842 (avg: 0.1555), other losses: []	Acc metric: 57037/60000 (95.06%)	 AttnAUC: []	 avg sec/iter: 0.0061
+
+
+Train set (epoch 18): [12832/60000 (21%)]	Loss: 0.0688 (avg: 0.1481), other losses: []	Acc metric: 12210/12832 (95.15%)	 AttnAUC: []	 avg sec/iter: 0.0051
+Train set (epoch 18): [25632/60000 (43%)]	Loss: 0.1568 (avg: 0.1521), other losses: []	Acc metric: 24377/25632 (95.10%)	 AttnAUC: []	 avg sec/iter: 0.0052
+Train set (epoch 18): [38432/60000 (64%)]	Loss: 0.3730 (avg: 0.1529), other losses: []	Acc metric: 36541/38432 (95.08%)	 AttnAUC: []	 avg sec/iter: 0.0053
+Train set (epoch 18): [51232/60000 (85%)]	Loss: 0.3298 (avg: 0.1538), other losses: []	Acc metric: 48681/51232 (95.02%)	 AttnAUC: []	 avg sec/iter: 0.0052
+Train set (epoch 18): [60000/60000 (100%)]	Loss: 0.1790 (avg: 0.1532), other losses: []	Acc metric: 57029/60000 (95.05%)	 AttnAUC: []	 avg sec/iter: 0.0052
+
+
+Train set (epoch 19): [12832/60000 (21%)]	Loss: 0.2136 (avg: 0.1520), other losses: []	Acc metric: 12222/12832 (95.25%)	 AttnAUC: []	 avg sec/iter: 0.0054
+Train set (epoch 19): [25632/60000 (43%)]	Loss: 0.1520 (avg: 0.1479), other losses: []	Acc metric: 24409/25632 (95.23%)	 AttnAUC: []	 avg sec/iter: 0.0064
+Train set (epoch 19): [38432/60000 (64%)]	Loss: 0.0226 (avg: 0.1487), other losses: []	Acc metric: 36614/38432 (95.27%)	 AttnAUC: []	 avg sec/iter: 0.0063
+Train set (epoch 19): [51232/60000 (85%)]	Loss: 0.0938 (avg: 0.1493), other losses: []	Acc metric: 48790/51232 (95.23%)	 AttnAUC: []	 avg sec/iter: 0.0060
+Train set (epoch 19): [60000/60000 (100%)]	Loss: 0.2005 (avg: 0.1510), other losses: []	Acc metric: 57100/60000 (95.17%)	 AttnAUC: []	 avg sec/iter: 0.0059
+
+
+Train set (epoch 20): [12832/60000 (21%)]	Loss: 0.0213 (avg: 0.1381), other losses: []	Acc metric: 12260/12832 (95.54%)	 AttnAUC: []	 avg sec/iter: 0.0052
+Train set (epoch 20): [25632/60000 (43%)]	Loss: 0.1351 (avg: 0.1437), other losses: []	Acc metric: 24470/25632 (95.47%)	 AttnAUC: []	 avg sec/iter: 0.0055
+Train set (epoch 20): [38432/60000 (64%)]	Loss: 0.3042 (avg: 0.1459), other losses: []	Acc metric: 36642/38432 (95.34%)	 AttnAUC: []	 avg sec/iter: 0.0054
+Train set (epoch 20): [51232/60000 (85%)]	Loss: 0.1180 (avg: 0.1478), other losses: []	Acc metric: 48821/51232 (95.29%)	 AttnAUC: []	 avg sec/iter: 0.0054
+Train set (epoch 20): [60000/60000 (100%)]	Loss: 0.0954 (avg: 0.1495), other losses: []	Acc metric: 57143/60000 (95.24%)	 AttnAUC: []	 avg sec/iter: 0.0056
+
+
+Train set (epoch 21): [12832/60000 (21%)]	Loss: 0.0539 (avg: 0.1261), other losses: []	Acc metric: 12325/12832 (96.05%)	 AttnAUC: []	 avg sec/iter: 0.0050
+Train set (epoch 21): [25632/60000 (43%)]	Loss: 0.2686 (avg: 0.1208), other losses: []	Acc metric: 24627/25632 (96.08%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 21): [38432/60000 (64%)]	Loss: 0.2855 (avg: 0.1188), other losses: []	Acc metric: 36979/38432 (96.22%)	 AttnAUC: []	 avg sec/iter: 0.0051
+Train set (epoch 21): [51232/60000 (85%)]	Loss: 0.0565 (avg: 0.1175), other losses: []	Acc metric: 49330/51232 (96.29%)	 AttnAUC: []	 avg sec/iter: 0.0053
+Train set (epoch 21): [60000/60000 (100%)]	Loss: 0.0857 (avg: 0.1154), other losses: []	Acc metric: 57815/60000 (96.36%)	 AttnAUC: []	 avg sec/iter: 0.0053
+
+
+Train set (epoch 22): [12832/60000 (21%)]	Loss: 0.0518 (avg: 0.1034), other losses: []	Acc metric: 12419/12832 (96.78%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 22): [25632/60000 (43%)]	Loss: 0.1802 (avg: 0.1045), other losses: []	Acc metric: 24785/25632 (96.70%)	 AttnAUC: []	 avg sec/iter: 0.0048
+Train set (epoch 22): [38432/60000 (64%)]	Loss: 0.0202 (avg: 0.1057), other losses: []	Acc metric: 37132/38432 (96.62%)	 AttnAUC: []	 avg sec/iter: 0.0050
+Train set (epoch 22): [51232/60000 (85%)]	Loss: 0.0956 (avg: 0.1041), other losses: []	Acc metric: 49522/51232 (96.66%)	 AttnAUC: []	 avg sec/iter: 0.0056
+Train set (epoch 22): [60000/60000 (100%)]	Loss: 0.3433 (avg: 0.1047), other losses: []	Acc metric: 57986/60000 (96.64%)	 AttnAUC: []	 avg sec/iter: 0.0060
+
+
+Train set (epoch 23): [12832/60000 (21%)]	Loss: 0.1513 (avg: 0.1045), other losses: []	Acc metric: 12400/12832 (96.63%)	 AttnAUC: []	 avg sec/iter: 0.0059
+Train set (epoch 23): [25632/60000 (43%)]	Loss: 0.3202 (avg: 0.1046), other losses: []	Acc metric: 24761/25632 (96.60%)	 AttnAUC: []	 avg sec/iter: 0.0057
+Train set (epoch 23): [38432/60000 (64%)]	Loss: 0.0495 (avg: 0.1043), other losses: []	Acc metric: 37133/38432 (96.62%)	 AttnAUC: []	 avg sec/iter: 0.0055
+Train set (epoch 23): [51232/60000 (85%)]	Loss: 0.0788 (avg: 0.1029), other losses: []	Acc metric: 49533/51232 (96.68%)	 AttnAUC: []	 avg sec/iter: 0.0055
+Train set (epoch 23): [60000/60000 (100%)]	Loss: 0.0505 (avg: 0.1022), other losses: []	Acc metric: 58023/60000 (96.70%)	 AttnAUC: []	 avg sec/iter: 0.0056
+
+
+Train set (epoch 24): [12832/60000 (21%)]	Loss: 0.1015 (avg: 0.1029), other losses: []	Acc metric: 12411/12832 (96.72%)	 AttnAUC: []	 avg sec/iter: 0.0058
+Train set (epoch 24): [25632/60000 (43%)]	Loss: 0.1110 (avg: 0.1005), other losses: []	Acc metric: 24816/25632 (96.82%)	 AttnAUC: []	 avg sec/iter: 0.0053
+Train set (epoch 24): [38432/60000 (64%)]	Loss: 0.1031 (avg: 0.1004), other losses: []	Acc metric: 37183/38432 (96.75%)	 AttnAUC: []	 avg sec/iter: 0.0052
+Train set (epoch 24): [51232/60000 (85%)]	Loss: 0.1434 (avg: 0.1001), other losses: []	Acc metric: 49567/51232 (96.75%)	 AttnAUC: []	 avg sec/iter: 0.0051
+Train set (epoch 24): [60000/60000 (100%)]	Loss: 0.0818 (avg: 0.0992), other losses: []	Acc metric: 58078/60000 (96.80%)	 AttnAUC: []	 avg sec/iter: 0.0051
+
+
+Train set (epoch 25): [12832/60000 (21%)]	Loss: 0.1224 (avg: 0.0894), other losses: []	Acc metric: 12480/12832 (97.26%)	 AttnAUC: []	 avg sec/iter: 0.0052
+Train set (epoch 25): [25632/60000 (43%)]	Loss: 0.0456 (avg: 0.0943), other losses: []	Acc metric: 24883/25632 (97.08%)	 AttnAUC: []	 avg sec/iter: 0.0050
+Train set (epoch 25): [38432/60000 (64%)]	Loss: 0.1591 (avg: 0.0957), other losses: []	Acc metric: 37281/38432 (97.01%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 25): [51232/60000 (85%)]	Loss: 0.0045 (avg: 0.0965), other losses: []	Acc metric: 49659/51232 (96.93%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 25): [60000/60000 (100%)]	Loss: 0.0749 (avg: 0.0967), other losses: []	Acc metric: 58166/60000 (96.94%)	 AttnAUC: []	 avg sec/iter: 0.0049
+
+
+Train set (epoch 26): [12832/60000 (21%)]	Loss: 0.3209 (avg: 0.0966), other losses: []	Acc metric: 12428/12832 (96.85%)	 AttnAUC: []	 avg sec/iter: 0.0053
+Train set (epoch 26): [25632/60000 (43%)]	Loss: 0.0457 (avg: 0.0935), other losses: []	Acc metric: 24856/25632 (96.97%)	 AttnAUC: []	 avg sec/iter: 0.0055
+Train set (epoch 26): [38432/60000 (64%)]	Loss: 0.0746 (avg: 0.0931), other losses: []	Acc metric: 37267/38432 (96.97%)	 AttnAUC: []	 avg sec/iter: 0.0054
+Train set (epoch 26): [51232/60000 (85%)]	Loss: 0.1127 (avg: 0.0947), other losses: []	Acc metric: 49672/51232 (96.96%)	 AttnAUC: []	 avg sec/iter: 0.0057
+Train set (epoch 26): [60000/60000 (100%)]	Loss: 0.0616 (avg: 0.0941), other losses: []	Acc metric: 58202/60000 (97.00%)	 AttnAUC: []	 avg sec/iter: 0.0056
+
+
+Train set (epoch 27): [12832/60000 (21%)]	Loss: 0.0738 (avg: 0.0929), other losses: []	Acc metric: 12444/12832 (96.98%)	 AttnAUC: []	 avg sec/iter: 0.0053
+Train set (epoch 27): [25632/60000 (43%)]	Loss: 0.0510 (avg: 0.0931), other losses: []	Acc metric: 24866/25632 (97.01%)	 AttnAUC: []	 avg sec/iter: 0.0051
+Train set (epoch 27): [38432/60000 (64%)]	Loss: 0.0415 (avg: 0.0928), other losses: []	Acc metric: 37284/38432 (97.01%)	 AttnAUC: []	 avg sec/iter: 0.0053
+Train set (epoch 27): [51232/60000 (85%)]	Loss: 0.0504 (avg: 0.0931), other losses: []	Acc metric: 49675/51232 (96.96%)	 AttnAUC: []	 avg sec/iter: 0.0057
+Train set (epoch 27): [60000/60000 (100%)]	Loss: 0.1012 (avg: 0.0927), other losses: []	Acc metric: 58203/60000 (97.00%)	 AttnAUC: []	 avg sec/iter: 0.0062
+
+
+Train set (epoch 28): [12832/60000 (21%)]	Loss: 0.5226 (avg: 0.0975), other losses: []	Acc metric: 12425/12832 (96.83%)	 AttnAUC: []	 avg sec/iter: 0.0081
+Train set (epoch 28): [25632/60000 (43%)]	Loss: 0.0598 (avg: 0.0923), other losses: []	Acc metric: 24874/25632 (97.04%)	 AttnAUC: []	 avg sec/iter: 0.0075
+Train set (epoch 28): [38432/60000 (64%)]	Loss: 0.0317 (avg: 0.0933), other losses: []	Acc metric: 37292/38432 (97.03%)	 AttnAUC: []	 avg sec/iter: 0.0067
+Train set (epoch 28): [51232/60000 (85%)]	Loss: 0.0381 (avg: 0.0941), other losses: []	Acc metric: 49701/51232 (97.01%)	 AttnAUC: []	 avg sec/iter: 0.0063
+Train set (epoch 28): [60000/60000 (100%)]	Loss: 0.2065 (avg: 0.0938), other losses: []	Acc metric: 58208/60000 (97.01%)	 AttnAUC: []	 avg sec/iter: 0.0061
+
+
+Train set (epoch 29): [12832/60000 (21%)]	Loss: 0.0696 (avg: 0.0918), other losses: []	Acc metric: 12444/12832 (96.98%)	 AttnAUC: []	 avg sec/iter: 0.0053
+Train set (epoch 29): [25632/60000 (43%)]	Loss: 0.0312 (avg: 0.0931), other losses: []	Acc metric: 24860/25632 (96.99%)	 AttnAUC: []	 avg sec/iter: 0.0054
+Train set (epoch 29): [38432/60000 (64%)]	Loss: 0.1079 (avg: 0.0931), other losses: []	Acc metric: 37285/38432 (97.02%)	 AttnAUC: []	 avg sec/iter: 0.0052
+Train set (epoch 29): [51232/60000 (85%)]	Loss: 0.0349 (avg: 0.0925), other losses: []	Acc metric: 49710/51232 (97.03%)	 AttnAUC: []	 avg sec/iter: 0.0051
+Train set (epoch 29): [60000/60000 (100%)]	Loss: 0.0838 (avg: 0.0926), other losses: []	Acc metric: 58210/60000 (97.02%)	 AttnAUC: []	 avg sec/iter: 0.0051
+
+
+Train set (epoch 30): [12832/60000 (21%)]	Loss: 0.0204 (avg: 0.0932), other losses: []	Acc metric: 12447/12832 (97.00%)	 AttnAUC: []	 avg sec/iter: 0.0047
+Train set (epoch 30): [25632/60000 (43%)]	Loss: 0.0180 (avg: 0.0911), other losses: []	Acc metric: 24878/25632 (97.06%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 30): [38432/60000 (64%)]	Loss: 0.0268 (avg: 0.0904), other losses: []	Acc metric: 37302/38432 (97.06%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 30): [51232/60000 (85%)]	Loss: 0.1217 (avg: 0.0912), other losses: []	Acc metric: 49710/51232 (97.03%)	 AttnAUC: []	 avg sec/iter: 0.0049
+Train set (epoch 30): [60000/60000 (100%)]	Loss: 0.0307 (avg: 0.0903), other losses: []	Acc metric: 58235/60000 (97.06%)	 AttnAUC: []	 avg sec/iter: 0.0050
+
+
+saving the model to ./checkpoints//checkpoint_mnist-75sp_820601_epoch30_seed0000111.pth.tar
+testing with evaluation of attention: takes longer time
+100/60000 samples processed
+200/60000 samples processed
+300/60000 samples processed
+400/60000 samples processed
+500/60000 samples processed
+600/60000 samples processed
+700/60000 samples processed
+800/60000 samples processed
+900/60000 samples processed
+1000/60000 samples processed
+1100/60000 samples processed
+1200/60000 samples processed
+1300/60000 samples processed
+1400/60000 samples processed
+1500/60000 samples processed
+1600/60000 samples processed
+1700/60000 samples processed
+1800/60000 samples processed
+1900/60000 samples processed
+2000/60000 samples processed
+2100/60000 samples processed
+2200/60000 samples processed
+2300/60000 samples processed
+2400/60000 samples processed
+2500/60000 samples processed
+2600/60000 samples processed
+2700/60000 samples processed
+2800/60000 samples processed
+2900/60000 samples processed
+3000/60000 samples processed
+3100/60000 samples processed
+3200/60000 samples processed
+3300/60000 samples processed
+3400/60000 samples processed
+3500/60000 samples processed
+3600/60000 samples processed
+3700/60000 samples processed
+3800/60000 samples processed
+3900/60000 samples processed
+4000/60000 samples processed
+4100/60000 samples processed
+4200/60000 samples processed
+4300/60000 samples processed
+4400/60000 samples processed
+4500/60000 samples processed
+4600/60000 samples processed
+4700/60000 samples processed
+4800/60000 samples processed
+4900/60000 samples processed
+5000/60000 samples processed
+5100/60000 samples processed
+5200/60000 samples processed
+5300/60000 samples processed
+5400/60000 samples processed
+5500/60000 samples processed
+5600/60000 samples processed
+5700/60000 samples processed
+5800/60000 samples processed
+5900/60000 samples processed
+6000/60000 samples processed
+6100/60000 samples processed
+6200/60000 samples processed
+6300/60000 samples processed
+6400/60000 samples processed
+6500/60000 samples processed
+6600/60000 samples processed
+6700/60000 samples processed
+6800/60000 samples processed
+6900/60000 samples processed
+7000/60000 samples processed
+7100/60000 samples processed
+7200/60000 samples processed
+7300/60000 samples processed
+7400/60000 samples processed
+7500/60000 samples processed
+7600/60000 samples processed
+7700/60000 samples processed
+7800/60000 samples processed
+7900/60000 samples processed
+8000/60000 samples processed
+8100/60000 samples processed
+8200/60000 samples processed
+8300/60000 samples processed
+8400/60000 samples processed
+8500/60000 samples processed
+8600/60000 samples processed
+8700/60000 samples processed
+8800/60000 samples processed
+8900/60000 samples processed
+9000/60000 samples processed
+9100/60000 samples processed
+9200/60000 samples processed
+9300/60000 samples processed
+9400/60000 samples processed
+9500/60000 samples processed
+9600/60000 samples processed
+9700/60000 samples processed
+9800/60000 samples processed
+9900/60000 samples processed
+10000/60000 samples processed
+10100/60000 samples processed
+10200/60000 samples processed
+10300/60000 samples processed
+10400/60000 samples processed
+10500/60000 samples processed
+10600/60000 samples processed
+10700/60000 samples processed
+10800/60000 samples processed
+10900/60000 samples processed
+11000/60000 samples processed
+11100/60000 samples processed
+11200/60000 samples processed
+11300/60000 samples processed
+11400/60000 samples processed
+11500/60000 samples processed
+11600/60000 samples processed
+11700/60000 samples processed
+11800/60000 samples processed
+11900/60000 samples processed
+12000/60000 samples processed
+12100/60000 samples processed
+12200/60000 samples processed
+12300/60000 samples processed
+12400/60000 samples processed
+12500/60000 samples processed
+12600/60000 samples processed
+12700/60000 samples processed
+12800/60000 samples processed
+12900/60000 samples processed
+13000/60000 samples processed
+13100/60000 samples processed
+13200/60000 samples processed
+13300/60000 samples processed
+13400/60000 samples processed
+13500/60000 samples processed
+13600/60000 samples processed
+13700/60000 samples processed
+13800/60000 samples processed
+13900/60000 samples processed
+14000/60000 samples processed
+14100/60000 samples processed
+14200/60000 samples processed
+14300/60000 samples processed
+14400/60000 samples processed
+14500/60000 samples processed
+14600/60000 samples processed
+14700/60000 samples processed
+14800/60000 samples processed
+14900/60000 samples processed
+15000/60000 samples processed
+15100/60000 samples processed
+15200/60000 samples processed
+15300/60000 samples processed
+15400/60000 samples processed
+15500/60000 samples processed
+15600/60000 samples processed
+15700/60000 samples processed
+15800/60000 samples processed
+15900/60000 samples processed
+16000/60000 samples processed
+16100/60000 samples processed
+16200/60000 samples processed
+16300/60000 samples processed
+16400/60000 samples processed
+16500/60000 samples processed
+16600/60000 samples processed
+16700/60000 samples processed
+16800/60000 samples processed
+16900/60000 samples processed
+17000/60000 samples processed
+17100/60000 samples processed
+17200/60000 samples processed
+17300/60000 samples processed
+17400/60000 samples processed
+17500/60000 samples processed
+17600/60000 samples processed
+17700/60000 samples processed
+17800/60000 samples processed
+17900/60000 samples processed
+18000/60000 samples processed
+18100/60000 samples processed
+18200/60000 samples processed
+18300/60000 samples processed
+18400/60000 samples processed
+18500/60000 samples processed
+18600/60000 samples processed
+18700/60000 samples processed
+18800/60000 samples processed
+18900/60000 samples processed
+19000/60000 samples processed
+19100/60000 samples processed
+19200/60000 samples processed
+19300/60000 samples processed
+19400/60000 samples processed
+19500/60000 samples processed
+19600/60000 samples processed
+19700/60000 samples processed
+19800/60000 samples processed
+19900/60000 samples processed
+20000/60000 samples processed
+20100/60000 samples processed
+20200/60000 samples processed
+20300/60000 samples processed
+20400/60000 samples processed
+20500/60000 samples processed
+20600/60000 samples processed
+20700/60000 samples processed
+20800/60000 samples processed
+20900/60000 samples processed
+21000/60000 samples processed
+21100/60000 samples processed
+21200/60000 samples processed
+21300/60000 samples processed
+21400/60000 samples processed
+21500/60000 samples processed
+21600/60000 samples processed
+21700/60000 samples processed
+21800/60000 samples processed
+21900/60000 samples processed
+22000/60000 samples processed
+22100/60000 samples processed
+22200/60000 samples processed
+22300/60000 samples processed
+22400/60000 samples processed
+22500/60000 samples processed
+22600/60000 samples processed
+22700/60000 samples processed
+22800/60000 samples processed
+22900/60000 samples processed
+23000/60000 samples processed
+23100/60000 samples processed
+23200/60000 samples processed
+23300/60000 samples processed
+23400/60000 samples processed
+23500/60000 samples processed
+23600/60000 samples processed
+23700/60000 samples processed
+23800/60000 samples processed
+23900/60000 samples processed
+24000/60000 samples processed
+24100/60000 samples processed
+24200/60000 samples processed
+24300/60000 samples processed
+24400/60000 samples processed
+24500/60000 samples processed
+24600/60000 samples processed
+24700/60000 samples processed
+24800/60000 samples processed
+24900/60000 samples processed
+25000/60000 samples processed
+25100/60000 samples processed
+25200/60000 samples processed
+25300/60000 samples processed
+25400/60000 samples processed
+25500/60000 samples processed
+25600/60000 samples processed
+25700/60000 samples processed
+25800/60000 samples processed
+25900/60000 samples processed
+26000/60000 samples processed
+26100/60000 samples processed
+26200/60000 samples processed
+26300/60000 samples processed
+26400/60000 samples processed
+26500/60000 samples processed
+26600/60000 samples processed
+26700/60000 samples processed
+26800/60000 samples processed
+26900/60000 samples processed
+27000/60000 samples processed
+27100/60000 samples processed
+27200/60000 samples processed
+27300/60000 samples processed
+27400/60000 samples processed
+27500/60000 samples processed
+27600/60000 samples processed
+27700/60000 samples processed
+27800/60000 samples processed
+27900/60000 samples processed
+28000/60000 samples processed
+28100/60000 samples processed
+28200/60000 samples processed
+28300/60000 samples processed
+28400/60000 samples processed
+28500/60000 samples processed
+28600/60000 samples processed
+28700/60000 samples processed
+28800/60000 samples processed
+28900/60000 samples processed
+29000/60000 samples processed
+29100/60000 samples processed
+29200/60000 samples processed
+29300/60000 samples processed
+29400/60000 samples processed
+29500/60000 samples processed
+29600/60000 samples processed
+29700/60000 samples processed
+29800/60000 samples processed
+29900/60000 samples processed
+30000/60000 samples processed
+30100/60000 samples processed
+30200/60000 samples processed
+30300/60000 samples processed
+30400/60000 samples processed
+30500/60000 samples processed
+30600/60000 samples processed
+30700/60000 samples processed
+30800/60000 samples processed
+30900/60000 samples processed
+31000/60000 samples processed
+31100/60000 samples processed
+31200/60000 samples processed
+31300/60000 samples processed
+31400/60000 samples processed
+31500/60000 samples processed
+31600/60000 samples processed
+31700/60000 samples processed
+31800/60000 samples processed
+31900/60000 samples processed
+32000/60000 samples processed
+32100/60000 samples processed
+32200/60000 samples processed
+32300/60000 samples processed
+32400/60000 samples processed
+32500/60000 samples processed
+32600/60000 samples processed
+32700/60000 samples processed
+32800/60000 samples processed
+32900/60000 samples processed
+33000/60000 samples processed
+33100/60000 samples processed
+33200/60000 samples processed
+33300/60000 samples processed
+33400/60000 samples processed
+33500/60000 samples processed
+33600/60000 samples processed
+33700/60000 samples processed
+33800/60000 samples processed
+33900/60000 samples processed
+34000/60000 samples processed
+34100/60000 samples processed
+34200/60000 samples processed
+34300/60000 samples processed
+34400/60000 samples processed
+34500/60000 samples processed
+34600/60000 samples processed
+34700/60000 samples processed
+34800/60000 samples processed
+34900/60000 samples processed
+35000/60000 samples processed
+35100/60000 samples processed
+35200/60000 samples processed
+35300/60000 samples processed
+35400/60000 samples processed
+35500/60000 samples processed
+35600/60000 samples processed
+35700/60000 samples processed
+35800/60000 samples processed
+35900/60000 samples processed
+36000/60000 samples processed
+36100/60000 samples processed
+36200/60000 samples processed
+36300/60000 samples processed
+36400/60000 samples processed
+36500/60000 samples processed
+36600/60000 samples processed
+36700/60000 samples processed
+36800/60000 samples processed
+36900/60000 samples processed
+37000/60000 samples processed
+37100/60000 samples processed
+37200/60000 samples processed
+37300/60000 samples processed
+37400/60000 samples processed
+37500/60000 samples processed
+37600/60000 samples processed
+37700/60000 samples processed
+37800/60000 samples processed
+37900/60000 samples processed
+38000/60000 samples processed
+38100/60000 samples processed
+38200/60000 samples processed
+38300/60000 samples processed
+38400/60000 samples processed
+38500/60000 samples processed
+38600/60000 samples processed
+38700/60000 samples processed
+38800/60000 samples processed
+38900/60000 samples processed
+39000/60000 samples processed
+39100/60000 samples processed
+39200/60000 samples processed
+39300/60000 samples processed
+39400/60000 samples processed
+39500/60000 samples processed
+39600/60000 samples processed
+39700/60000 samples processed
+39800/60000 samples processed
+39900/60000 samples processed
+40000/60000 samples processed
+40100/60000 samples processed
+40200/60000 samples processed
+40300/60000 samples processed
+40400/60000 samples processed
+40500/60000 samples processed
+40600/60000 samples processed
+40700/60000 samples processed
+40800/60000 samples processed
+40900/60000 samples processed
+41000/60000 samples processed
+41100/60000 samples processed
+41200/60000 samples processed
+41300/60000 samples processed
+41400/60000 samples processed
+41500/60000 samples processed
+41600/60000 samples processed
+41700/60000 samples processed
+41800/60000 samples processed
+41900/60000 samples processed
+42000/60000 samples processed
+42100/60000 samples processed
+42200/60000 samples processed
+42300/60000 samples processed
+42400/60000 samples processed
+42500/60000 samples processed
+42600/60000 samples processed
+42700/60000 samples processed
+42800/60000 samples processed
+42900/60000 samples processed
+43000/60000 samples processed
+43100/60000 samples processed
+43200/60000 samples processed
+43300/60000 samples processed
+43400/60000 samples processed
+43500/60000 samples processed
+43600/60000 samples processed
+43700/60000 samples processed
+43800/60000 samples processed
+43900/60000 samples processed
+44000/60000 samples processed
+44100/60000 samples processed
+44200/60000 samples processed
+44300/60000 samples processed
+44400/60000 samples processed
+44500/60000 samples processed
+44600/60000 samples processed
+44700/60000 samples processed
+44800/60000 samples processed
+44900/60000 samples processed
+45000/60000 samples processed
+45100/60000 samples processed
+45200/60000 samples processed
+45300/60000 samples processed
+45400/60000 samples processed
+45500/60000 samples processed
+45600/60000 samples processed
+45700/60000 samples processed
+45800/60000 samples processed
+45900/60000 samples processed
+46000/60000 samples processed
+46100/60000 samples processed
+46200/60000 samples processed
+46300/60000 samples processed
+46400/60000 samples processed
+46500/60000 samples processed
+46600/60000 samples processed
+46700/60000 samples processed
+46800/60000 samples processed
+46900/60000 samples processed
+47000/60000 samples processed
+47100/60000 samples processed
+47200/60000 samples processed
+47300/60000 samples processed
+47400/60000 samples processed
+47500/60000 samples processed
+47600/60000 samples processed
+47700/60000 samples processed
+47800/60000 samples processed
+47900/60000 samples processed
+48000/60000 samples processed
+48100/60000 samples processed
+48200/60000 samples processed
+48300/60000 samples processed
+48400/60000 samples processed
+48500/60000 samples processed
+48600/60000 samples processed
+48700/60000 samples processed
+48800/60000 samples processed
+48900/60000 samples processed
+49000/60000 samples processed
+49100/60000 samples processed
+49200/60000 samples processed
+49300/60000 samples processed
+49400/60000 samples processed
+49500/60000 samples processed
+49600/60000 samples processed
+49700/60000 samples processed
+49800/60000 samples processed
+49900/60000 samples processed
+50000/60000 samples processed
+50100/60000 samples processed
+50200/60000 samples processed
+50300/60000 samples processed
+50400/60000 samples processed
+50500/60000 samples processed
+50600/60000 samples processed
+50700/60000 samples processed
+50800/60000 samples processed
+50900/60000 samples processed
+51000/60000 samples processed
+51100/60000 samples processed
+51200/60000 samples processed
+51300/60000 samples processed
+51400/60000 samples processed
+51500/60000 samples processed
+51600/60000 samples processed
+51700/60000 samples processed
+51800/60000 samples processed
+51900/60000 samples processed
+52000/60000 samples processed
+52100/60000 samples processed
+52200/60000 samples processed
+52300/60000 samples processed
+52400/60000 samples processed
+52500/60000 samples processed
+52600/60000 samples processed
+52700/60000 samples processed
+52800/60000 samples processed
+52900/60000 samples processed
+53000/60000 samples processed
+53100/60000 samples processed
+53200/60000 samples processed
+53300/60000 samples processed
+53400/60000 samples processed
+53500/60000 samples processed
+53600/60000 samples processed
+53700/60000 samples processed
+53800/60000 samples processed
+53900/60000 samples processed
+54000/60000 samples processed
+54100/60000 samples processed
+54200/60000 samples processed
+54300/60000 samples processed
+54400/60000 samples processed
+54500/60000 samples processed
+54600/60000 samples processed
+54700/60000 samples processed
+54800/60000 samples processed
+54900/60000 samples processed
+55000/60000 samples processed
+55100/60000 samples processed
+55200/60000 samples processed
+55300/60000 samples processed
+55400/60000 samples processed
+55500/60000 samples processed
+55600/60000 samples processed
+55700/60000 samples processed
+55800/60000 samples processed
+55900/60000 samples processed
+56000/60000 samples processed
+56100/60000 samples processed
+56200/60000 samples processed
+56300/60000 samples processed
+56400/60000 samples processed
+56500/60000 samples processed
+56600/60000 samples processed
+56700/60000 samples processed
+56800/60000 samples processed
+56900/60000 samples processed
+57000/60000 samples processed
+57100/60000 samples processed
+57200/60000 samples processed
+57300/60000 samples processed
+57400/60000 samples processed
+57500/60000 samples processed
+57600/60000 samples processed
+57700/60000 samples processed
+57800/60000 samples processed
+57900/60000 samples processed
+58000/60000 samples processed
+58100/60000 samples processed
+58200/60000 samples processed
+58300/60000 samples processed
+58400/60000 samples processed
+58500/60000 samples processed
+58600/60000 samples processed
+58700/60000 samples processed
+58800/60000 samples processed
+58900/60000 samples processed
+59000/60000 samples processed
+59100/60000 samples processed
+59200/60000 samples processed
+59300/60000 samples processed
+59400/60000 samples processed
+59500/60000 samples processed
+59600/60000 samples processed
+59700/60000 samples processed
+59800/60000 samples processed
+59900/60000 samples processed
+60000/60000 samples processed
+lbl: 0, avg acc: 99.27% (5880/5923)
+lbl: 1, avg acc: 98.99% (6674/6742)
+lbl: 2, avg acc: 98.71% (5881/5958)
+lbl: 3, avg acc: 97.23% (5961/6131)
+lbl: 4, avg acc: 97.47% (5694/5842)
+lbl: 5, avg acc: 97.92% (5308/5421)
+lbl: 6, avg acc: 99.12% (5866/5918)
+lbl: 7, avg acc: 97.89% (6133/6265)
+lbl: 8, avg acc: 97.54% (5707/5851)
+lbl: 9, avg acc: 96.49% (5740/5949)
+0 <= N_nodes <= 100000.0 (min=40, max=75), avg acc: 98.07% (58844/60000)
+Train set (epoch 30): Avg loss: 0.0608, Acc metric: 58844/60000 (98.07%)	 AttnAUC: ['77.21']	 avg sec/iter: 0.2631
+
+WARNING: file ./checkpoints/mnist-75sp_alpha_WS_train_seed111_orig.pkl exists and will be overwritten
+testing with evaluation of attention: takes longer time
+100/10000 samples processed
+200/10000 samples processed
+300/10000 samples processed
+400/10000 samples processed
+500/10000 samples processed
+600/10000 samples processed
+700/10000 samples processed
+800/10000 samples processed
+900/10000 samples processed
+1000/10000 samples processed
+1100/10000 samples processed
+1200/10000 samples processed
+1300/10000 samples processed
+1400/10000 samples processed
+1500/10000 samples processed
+1600/10000 samples processed
+1700/10000 samples processed
+1800/10000 samples processed
+1900/10000 samples processed
+2000/10000 samples processed
+2100/10000 samples processed
+2200/10000 samples processed
+2300/10000 samples processed
+2400/10000 samples processed
+2500/10000 samples processed
+2600/10000 samples processed
+2700/10000 samples processed
+2800/10000 samples processed
+2900/10000 samples processed
+3000/10000 samples processed
+3100/10000 samples processed
+3200/10000 samples processed
+3300/10000 samples processed
+3400/10000 samples processed
+3500/10000 samples processed
+3600/10000 samples processed
+3700/10000 samples processed
+3800/10000 samples processed
+3900/10000 samples processed
+4000/10000 samples processed
+4100/10000 samples processed
+4200/10000 samples processed
+4300/10000 samples processed
+4400/10000 samples processed
+4500/10000 samples processed
+4600/10000 samples processed
+4700/10000 samples processed
+4800/10000 samples processed
+4900/10000 samples processed
+5000/10000 samples processed
+5100/10000 samples processed
+5200/10000 samples processed
+5300/10000 samples processed
+5400/10000 samples processed
+5500/10000 samples processed
+5600/10000 samples processed
+5700/10000 samples processed
+5800/10000 samples processed
+5900/10000 samples processed
+6000/10000 samples processed
+6100/10000 samples processed
+6200/10000 samples processed
+6300/10000 samples processed
+6400/10000 samples processed
+6500/10000 samples processed
+6600/10000 samples processed
+6700/10000 samples processed
+6800/10000 samples processed
+6900/10000 samples processed
+7000/10000 samples processed
+7100/10000 samples processed
+7200/10000 samples processed
+7300/10000 samples processed
+7400/10000 samples processed
+7500/10000 samples processed
+7600/10000 samples processed
+7700/10000 samples processed
+7800/10000 samples processed
+7900/10000 samples processed
+8000/10000 samples processed
+8100/10000 samples processed
+8200/10000 samples processed
+8300/10000 samples processed
+8400/10000 samples processed
+8500/10000 samples processed
+8600/10000 samples processed
+8700/10000 samples processed
+8800/10000 samples processed
+8900/10000 samples processed
+9000/10000 samples processed
+9100/10000 samples processed
+9200/10000 samples processed
+9300/10000 samples processed
+9400/10000 samples processed
+9500/10000 samples processed
+9600/10000 samples processed
+9700/10000 samples processed
+9800/10000 samples processed
+9900/10000 samples processed
+10000/10000 samples processed
+lbl: 0, avg acc: 99.08% (971/980)
+lbl: 1, avg acc: 99.21% (1126/1135)
+lbl: 2, avg acc: 97.97% (1011/1032)
+lbl: 3, avg acc: 98.02% (990/1010)
+lbl: 4, avg acc: 96.13% (944/982)
+lbl: 5, avg acc: 97.42% (869/892)
+lbl: 6, avg acc: 97.81% (937/958)
+lbl: 7, avg acc: 96.40% (991/1028)
+lbl: 8, avg acc: 96.92% (944/974)
+lbl: 9, avg acc: 95.64% (965/1009)
+0 <= N_nodes <= 100000.0 (min=42, max=75), avg acc: 97.48% (9748/10000)
+Test set (epoch 30): Avg loss: 0.0799, Acc metric: 9748/10000 (97.48%)	 AttnAUC: ['77.01']	 avg sec/iter: 0.2582
+
+WARNING: file ./checkpoints/mnist-75sp_alpha_WS_test_seed111_orig.pkl exists and will be overwritten
+testing with evaluation of attention: takes longer time
+100/10000 samples processed
+200/10000 samples processed
+300/10000 samples processed
+400/10000 samples processed
+500/10000 samples processed
+600/10000 samples processed
+700/10000 samples processed
+800/10000 samples processed
+900/10000 samples processed
+1000/10000 samples processed
+1100/10000 samples processed
+1200/10000 samples processed
+1300/10000 samples processed
+1400/10000 samples processed
+1500/10000 samples processed
+1600/10000 samples processed
+1700/10000 samples processed
+1800/10000 samples processed
+1900/10000 samples processed
+2000/10000 samples processed
+2100/10000 samples processed
+2200/10000 samples processed
+2300/10000 samples processed
+2400/10000 samples processed
+2500/10000 samples processed
+2600/10000 samples processed
+2700/10000 samples processed
+2800/10000 samples processed
+2900/10000 samples processed
+3000/10000 samples processed
+3100/10000 samples processed
+3200/10000 samples processed
+3300/10000 samples processed
+3400/10000 samples processed
+3500/10000 samples processed
+3600/10000 samples processed
+3700/10000 samples processed
+3800/10000 samples processed
+3900/10000 samples processed
+4000/10000 samples processed
+4100/10000 samples processed
+4200/10000 samples processed
+4300/10000 samples processed
+4400/10000 samples processed
+4500/10000 samples processed
+4600/10000 samples processed
+4700/10000 samples processed
+4800/10000 samples processed
+4900/10000 samples processed
+5000/10000 samples processed
+5100/10000 samples processed
+5200/10000 samples processed
+5300/10000 samples processed
+5400/10000 samples processed
+5500/10000 samples processed
+5600/10000 samples processed
+5700/10000 samples processed
+5800/10000 samples processed
+5900/10000 samples processed
+6000/10000 samples processed
+6100/10000 samples processed
+6200/10000 samples processed
+6300/10000 samples processed
+6400/10000 samples processed
+6500/10000 samples processed
+6600/10000 samples processed
+6700/10000 samples processed
+6800/10000 samples processed
+6900/10000 samples processed
+7000/10000 samples processed
+7100/10000 samples processed
+7200/10000 samples processed
+7300/10000 samples processed
+7400/10000 samples processed
+7500/10000 samples processed
+7600/10000 samples processed
+7700/10000 samples processed
+7800/10000 samples processed
+7900/10000 samples processed
+8000/10000 samples processed
+8100/10000 samples processed
+8200/10000 samples processed
+8300/10000 samples processed
+8400/10000 samples processed
+8500/10000 samples processed
+8600/10000 samples processed
+8700/10000 samples processed
+8800/10000 samples processed
+8900/10000 samples processed
+9000/10000 samples processed
+9100/10000 samples processed
+9200/10000 samples processed
+9300/10000 samples processed
+9400/10000 samples processed
+9500/10000 samples processed
+9600/10000 samples processed
+9700/10000 samples processed
+9800/10000 samples processed
+9900/10000 samples processed
+10000/10000 samples processed
+lbl: 0, avg acc: 93.37% (915/980)
+lbl: 1, avg acc: 50.66% (575/1135)
+lbl: 2, avg acc: 89.24% (921/1032)
+lbl: 3, avg acc: 84.16% (850/1010)
+lbl: 4, avg acc: 69.86% (686/982)
+lbl: 5, avg acc: 92.71% (827/892)
+lbl: 6, avg acc: 81.94% (785/958)
+lbl: 7, avg acc: 85.41% (878/1028)
+lbl: 8, avg acc: 93.74% (913/974)
+lbl: 9, avg acc: 69.57% (702/1009)
+0 <= N_nodes <= 100000.0 (min=42, max=75), avg acc: 80.52% (8052/10000)
+Test set (epoch 30): Avg loss: 0.6119, Acc metric: 8052/10000 (80.52%)	 AttnAUC: ['69.80']	 avg sec/iter: 0.2601
+
+WARNING: file ./checkpoints/mnist-75sp_alpha_WS_test_seed111_noisy.pkl exists and will be overwritten
+testing with evaluation of attention: takes longer time
+100/10000 samples processed
+200/10000 samples processed
+300/10000 samples processed
+400/10000 samples processed
+500/10000 samples processed
+600/10000 samples processed
+700/10000 samples processed
+800/10000 samples processed
+900/10000 samples processed
+1000/10000 samples processed
+1100/10000 samples processed
+1200/10000 samples processed
+1300/10000 samples processed
+1400/10000 samples processed
+1500/10000 samples processed
+1600/10000 samples processed
+1700/10000 samples processed
+1800/10000 samples processed
+1900/10000 samples processed
+2000/10000 samples processed
+2100/10000 samples processed
+2200/10000 samples processed
+2300/10000 samples processed
+2400/10000 samples processed
+2500/10000 samples processed
+2600/10000 samples processed
+2700/10000 samples processed
+2800/10000 samples processed
+2900/10000 samples processed
+3000/10000 samples processed
+3100/10000 samples processed
+3200/10000 samples processed
+3300/10000 samples processed
+3400/10000 samples processed
+3500/10000 samples processed
+3600/10000 samples processed
+3700/10000 samples processed
+3800/10000 samples processed
+3900/10000 samples processed
+4000/10000 samples processed
+4100/10000 samples processed
+4200/10000 samples processed
+4300/10000 samples processed
+4400/10000 samples processed
+4500/10000 samples processed
+4600/10000 samples processed
+4700/10000 samples processed
+4800/10000 samples processed
+4900/10000 samples processed
+5000/10000 samples processed
+5100/10000 samples processed
+5200/10000 samples processed
+5300/10000 samples processed
+5400/10000 samples processed
+5500/10000 samples processed
+5600/10000 samples processed
+5700/10000 samples processed
+5800/10000 samples processed
+5900/10000 samples processed
+6000/10000 samples processed
+6100/10000 samples processed
+6200/10000 samples processed
+6300/10000 samples processed
+6400/10000 samples processed
+6500/10000 samples processed
+6600/10000 samples processed
+6700/10000 samples processed
+6800/10000 samples processed
+6900/10000 samples processed
+7000/10000 samples processed
+7100/10000 samples processed
+7200/10000 samples processed
+7300/10000 samples processed
+7400/10000 samples processed
+7500/10000 samples processed
+7600/10000 samples processed
+7700/10000 samples processed
+7800/10000 samples processed
+7900/10000 samples processed
+8000/10000 samples processed
+8100/10000 samples processed
+8200/10000 samples processed
+8300/10000 samples processed
+8400/10000 samples processed
+8500/10000 samples processed
+8600/10000 samples processed
+8700/10000 samples processed
+8800/10000 samples processed
+8900/10000 samples processed
+9000/10000 samples processed
+9100/10000 samples processed
+9200/10000 samples processed
+9300/10000 samples processed
+9400/10000 samples processed
+9500/10000 samples processed
+9600/10000 samples processed
+9700/10000 samples processed
+9800/10000 samples processed
+9900/10000 samples processed
+10000/10000 samples processed
+lbl: 0, avg acc: 95.92% (940/980)
+lbl: 1, avg acc: 69.96% (794/1135)
+lbl: 2, avg acc: 93.22% (962/1032)
+lbl: 3, avg acc: 90.10% (910/1010)
+lbl: 4, avg acc: 78.51% (771/982)
+lbl: 5, avg acc: 94.62% (844/892)
+lbl: 6, avg acc: 87.79% (841/958)
+lbl: 7, avg acc: 89.98% (925/1028)
+lbl: 8, avg acc: 95.59% (931/974)
+lbl: 9, avg acc: 77.60% (783/1009)
+0 <= N_nodes <= 100000.0 (min=42, max=75), avg acc: 87.01% (8701/10000)
+Test set (epoch 30): Avg loss: 0.4091, Acc metric: 8701/10000 (87.01%)	 AttnAUC: ['71.29']	 avg sec/iter: 0.2551
+
+WARNING: file ./checkpoints/mnist-75sp_alpha_WS_test_seed111_noisy-c.pkl exists and will be overwritten
+done in 0:09:46.090854

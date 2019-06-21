@@ -9,7 +9,7 @@ This repository contains code to generate data and reproduce experiments from ou
 
 MNIST |  TRIANGLES
 |:-------------:|:-------------:|
-| <figure> <img src="data/mnist_animation.gif" height="400"></figure> |  <figure> <img src="data/triangles_animation.gif" height="400"></figure>
+| <figure> <img src="data/mnist_animation.gif" height="500"></figure> |  <figure> <img src="data/triangles_animation.gif" height="500"></figure>
 
 
 For MNIST from top to bottom rows:

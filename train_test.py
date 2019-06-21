@@ -84,6 +84,9 @@ def test(model, test_loader, epoch, loss_fn, split, args, feature_stats=None, no
                 data[0][:, :, :3] = data[0][:, :, :3] + noise
 
             mask = [data[2].view(len(data[2]), -1)]
+            N_nodes.append(data[4]['N_nodes'].detach())
+            targets.append(data[3].detach())
+
             output, other_outputs = model(data)
             other_losses = other_outputs['reg'] if 'reg' in other_outputs else []
             alpha = other_outputs['alpha'] if 'alpha' in other_outputs else []
@@ -99,11 +102,11 @@ def test(model, test_loader, epoch, loss_fn, split, args, feature_stats=None, no
                 loss += l
             test_loss += loss.item()
             pred.append(output.detach())
-            targets.append(data[3].detach())
-            N_nodes.append(data[4]['N_nodes'])
+
+
             update_attn(data, alpha, alpha_pred, alpha_GT, mask)
             if eval_attn:
-                assert len(alpha) == 0, ('invalid mode, eval_attn should be false')
+                assert len(alpha) == 0, ('invalid mode, eval_attn should be false for this type of pooling')
                 alpha_pred[0].extend(attn_heatmaps(model, args.device, data, output.data, test_loader.batch_size, constant_mask=args.dataset=='mnist'))
 
             n_samples += len(data[0])
@@ -122,7 +125,7 @@ def test(model, test_loader, epoch, loss_fn, split, args, feature_stats=None, no
             correct += count_correct(pred[5000:], targets[5000:], N_nodes=N_nodes[5000:], N_nodes_min=26, N_nodes_max=200)
     elif args.dataset == 'triangles':
         correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=25)
-        if data[0].shape[1] > 25:
+        if pred.shape[0] > 5000:
             correct += count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=26, N_nodes_max=100)
     else:
         correct = count_correct(pred, targets, N_nodes=N_nodes, N_nodes_min=0, N_nodes_max=1e5)
@@ -155,15 +158,16 @@ def test(model, test_loader, epoch, loss_fn, split, args, feature_stats=None, no
 
 
 def update_attn(data, alpha, alpha_pred, alpha_GT, mask):
-    key = 'node_attn_GT' if 'node_attn_GT' in data[4] else 'node_attn'
+    key = 'node_attn_eval'
     for layer in range(len(mask)):
-        mask[layer] = mask[layer].data.cpu().numpy()
-
+        mask[layer] = mask[layer].data.cpu().numpy() > 0
     if key in data[4]:
+        if not isinstance(data[4][key], list):
+            data[4][key] = [data[4][key]]
         for layer in range(len(data[4][key])):
             if layer not in alpha_GT:
                 alpha_GT[layer] = []
-            # print(key, layer)
+            # print(key, layer, len(data[4][key]), len(mask))
             alpha_GT[layer].extend(masked_alpha(data[4][key][layer].data.cpu().numpy(), mask[layer]))
     for layer in range(len(alpha)):
         if layer not in alpha_pred:
@@ -173,8 +177,8 @@ def update_attn(data, alpha, alpha_pred, alpha_GT, mask):
 
 def masked_alpha(alpha, mask):
     alpha_lst = []
-    # print(len(alpha), alpha.shape, len(mask), mask[0].shape)
     for i in range(len(alpha)):
+        # print('gt', len(alpha), alpha[i].shape, mask[i].shape, alpha[i][mask[i] > 0].shape, mask[i].sum(), mask[i].min(), mask[i].max(), mask[i].dtype)
         alpha_lst.append(alpha[i][mask[i]])
     return alpha_lst
 
@@ -212,11 +216,9 @@ def attn_heatmaps(model, device, data, output_org, batch_size=1, constant_mask=F
                 output[idx] = model([x[idx], A[idx], mask[idx], None, {}])[0][:, labels[b]].data
 
             alpha = torch.abs(output - output_org[b, labels[b]]).view(1, N_nodes_max) #* mask_org[b].view(1, N_nodes_max)
-            # alpha = torch.rand(1, N_nodes_max, device=device)
             if not constant_mask:
                 alpha = alpha[data[2][b].view(1, N_nodes_max)]
-            # print(alpha.shape, N_nodes[b], N_nodes_max)
-            alpha_WS.append((alpha / (alpha.sum() + 1e-7)).data.cpu().numpy())
+            alpha_WS.append(normalize(alpha).data.cpu().numpy())
 
     return alpha_WS
 

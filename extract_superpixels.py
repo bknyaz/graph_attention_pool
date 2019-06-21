@@ -35,7 +35,7 @@ def parse_args():
 
 def process_image(params):
     
-    img, index, n_images, args = params
+    img, index, n_images, args, to_print, shuffle = params
 
     assert img.dtype == np.uint8, img.dtype
     img = (img / 255.).astype(np.float32)
@@ -51,7 +51,12 @@ def process_image(params):
     assert n_sp_extracted <= args.n_sp and n_sp_extracted > 0, (args.split, index, n_sp_extracted, args.n_sp)
     assert n_sp_extracted == np.max(superpixels) + 1, ('superpixel indices', np.unique(superpixels))  # make sure superpixel indices are numbers from 0 to n-1
 
-    sp_order = sp_indices[np.random.permutation(n_sp_extracted)].astype(np.int32)
+    if shuffle:
+        ind = np.random.permutation(n_sp_extracted)
+    else:
+        ind = np.arange(n_sp_extracted)
+
+    sp_order = sp_indices[ind].astype(np.int32)
     if len(img.shape) == 2:
         img = img[:, :, None]
 
@@ -68,9 +73,9 @@ def process_image(params):
         sp_coord.append(cntr)
     sp_intensity = np.array(sp_intensity, np.float32)
     sp_coord = np.array(sp_coord, np.float32)
-    print('image={}/{}, shape={}, min={:.2f}, max={:.2f}, n_sp={}'.format(index, n_images, img.shape,
-                                                                          img.min(), img.max(), sp_intensity.shape[0]))
-    #print(sp_intensity.shape, sp_intensity.min(), sp_intensity.max(), sp_coord.shape, sp_coord.min(), sp_coord.max(), sp_order)
+    if to_print:
+        print('image={}/{}, shape={}, min={:.2f}, max={:.2f}, n_sp={}'.format(index + 1, n_images, img.shape,
+                                                                              img.min(), img.max(), sp_intensity.shape[0]))
 
     return sp_intensity, sp_coord, sp_order, superpixels
 
@@ -116,10 +121,10 @@ if __name__ == '__main__':
     if args.threads <= 0:
         sp_data = []
         for i in range(n_images):
-            sp_data.append(process_image((images[i], i, n_images, args)))
+            sp_data.append(process_image((images[i], i, n_images, args, True, True)))
     else:
         with mp.Pool(processes=args.threads) as pool:
-            sp_data  = pool.map(process_image, [(images[i], i, n_images, args) for i in range(n_images)])
+            sp_data  = pool.map(process_image, [(images[i], i, n_images, args, True, True) for i in range(n_images)])
 
     superpixels = [sp_data[i][3] for i in range(n_images)]
     sp_data = [sp_data[i][:3] for i in range(n_images)]

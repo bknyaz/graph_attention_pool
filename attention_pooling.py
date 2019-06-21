@@ -26,6 +26,7 @@ class AttentionPooling(nn.Module):
         self.drop_nodes = drop_nodes
         self.is_topk = self.pool_type[2].lower() == 'topk'
         self.debug = debug
+        self.clamp_value = 60
         if self.is_topk:
             self.topk_ratio = float(self.pool_type[3])  # r
             assert self.topk_ratio > 0 and self.topk_ratio <= 1, ('invalid top-k ratio', self.topk_ratio, self.pool_type)
@@ -108,6 +109,7 @@ class AttentionPooling(nn.Module):
         return x, A, mask, N_nodes, idx
 
     def forward(self, data):
+
         KL_loss = None
         x, A, mask, _, params_dict = data[:5]
 
@@ -119,12 +121,12 @@ class AttentionPooling(nn.Module):
             if not isinstance(params_dict['node_attn'], list):
                 params_dict['node_attn'] = [params_dict['node_attn']]
             alpha_gt = params_dict['node_attn'][-1].view(B, N)
-        if 'node_attn_GT' in params_dict:
-            if not isinstance(params_dict['node_attn_GT'], list):
-                params_dict['node_attn_GT'] = [params_dict['node_attn_GT']]
+        if 'node_attn_eval' in params_dict:
+            if not isinstance(params_dict['node_attn_eval'], list):
+                params_dict['node_attn_eval'] = [params_dict['node_attn_eval']]
 
-        if (self.pool_type[1] == 'gt' or (self.pool_type[1] == 'sup' and self.training) or self.debug) and alpha_gt is None:
-            raise ValueError('ground truth node attention values node_attn required for %s or debug mode' % self.pool_type)
+        if (self.pool_type[1] == 'gt' or (self.pool_type[1] == 'sup' and self.training)) and alpha_gt is None:
+            raise ValueError('ground truth node attention values node_attn required for %s' % self.pool_type)
 
         if self.pool_type[1] in ['unsup', 'sup']:
             attn_input = data[-1] if self.pool_arch[1] == 'prev' else x.clone()
@@ -133,9 +135,10 @@ class AttentionPooling(nn.Module):
             else:
                 alpha_pre = self.proj([attn_input, *data[1:]])[0].view(B, N)
             # softmax with masking out dummy nodes
+            alpha_pre = torch.clamp(alpha_pre, -self.clamp_value, self.clamp_value)
             alpha = normalize_batch(self.mask_out(torch.exp(alpha_pre), mask_float).view(B, N))
             if self.pool_type[1] == 'sup' and self.training:
-                KL_loss_per_node = self.mask_out(F.kl_div(torch.log(alpha + 1e-14), alpha_gt, reduction='none'), mask_float)  # per node loss
+                KL_loss_per_node = self.mask_out(F.kl_div(torch.log(alpha + 1e-14), alpha_gt, reduction='none'), mask_float.view(B,N))
                 KL_loss = self.kl_weight * torch.mean(KL_loss_per_node.sum(dim=1) / (N_nodes_float + 1e-7))  # mean over nodes, then mean over batches
         else:
             alpha = alpha_gt
@@ -158,10 +161,18 @@ class AttentionPooling(nn.Module):
             x, A, mask, N_nodes_pooled, idx = self.drop_nodes_edges(x, A, mask)
             if idx is not None and 'node_attn' in params_dict:
                 # update ground truth (or weakly labeled) attention for a reduced graph
-                params_dict['node_attn'].append((self.mask_out(torch.gather(alpha_gt, dim=1, index=idx), mask.float())))
-            if idx is not None and 'node_attn_GT' in params_dict:
+                params_dict['node_attn'].append(normalize_batch(self.mask_out(torch.gather(alpha_gt, dim=1, index=idx), mask.float())))
+            if idx is not None and 'node_attn_eval' in params_dict:
                 # update ground truth (or weakly labeled) attention for a reduced graph
-                params_dict['node_attn_GT'].append((self.mask_out(torch.gather(params_dict['node_attn_GT'][-1], dim=1, index=idx), mask.float())))
+                params_dict['node_attn_eval'].append(normalize_batch(self.mask_out(torch.gather(params_dict['node_attn_eval'][-1], dim=1, index=idx), mask.float())))
+        else:
+            N_nodes_pooled = torch.sum(mask, dim=1).long()  # B
+            if 'node_attn' in params_dict:
+                params_dict['node_attn'].append((self.mask_out(params_dict['node_attn'][-1], mask.float())))
+            if 'node_attn_eval' in params_dict:
+                params_dict['node_attn_eval'].append((self.mask_out(params_dict['node_attn_eval'][-1], mask.float())))
+
+        params_dict['N_nodes'] = N_nodes_pooled
 
         mask_matrix = mask.unsqueeze(2) & mask.unsqueeze(1)
         A = A * mask_matrix.float()   # or A[~mask_matrix] = 0
@@ -178,7 +189,7 @@ class AttentionPooling(nn.Module):
                 params_dict[key] = []
             params_dict[key].append(value.detach())
 
-        if self.debug:
+        if self.debug and alpha_gt is not None:
             idx_correct_pool = (alpha_gt > 0)
             idx_correct_drop = (alpha_gt == 0)
             alpha_correct_pool = alpha[idx_correct_pool].sum() / N_nodes_float.sum()

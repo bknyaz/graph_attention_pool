@@ -10,14 +10,14 @@ Some cases might not be supported in our code yet. We are working on completing 
 
 <figure> <img src="data/datasets.png" height="400"><figcaption>Datasets</figcaption></figure>
 
-# Examples
+
+## Data generation
 
 To generate all data using a single command, run ```./prepare_data.sh```.
 
 All generated/downloaded ata will be stored in the local ```./data``` directory.
 It can take 1-2 hours to prepare all data.
 
-## Data generation
 
 ### COLORS
 To generate training, validation and test data for our **Colors** dataset with different dimensionalities
@@ -30,6 +30,8 @@ To generate training, validation and test data for our **Colors** dataset with d
 To generate training, validation and test for our **Triangles** dataset using 2 CPU threads:
 
 python generate_data.py -D triangles --N_train 30000 --N_val 5000 --N_test 5000 --label_min 1 --label_max 10 --N_max 100 --threads 2
+
+python main.py -D triangles --epochs 100 --lr_decay_step 85,95 --test_batch_size 100 -f 64,64,64 -K 7 --aggregation sum --n_hidden 64 --readout max  --dropout 0 --pool attn_sup_threshold_skip_0.001_0.001 --pool_arch gnn_curr  --results None -d /scratch/ssd/bknyazev/data/random/ | tee results/triangle_sup_curr_0.001_norm_drop_fixed.log
 
 ### MNIST
 
@@ -53,7 +55,22 @@ Once datasets are generated or downloaded, you can use the following IPython not
 
 [COLORS and TRIANGLES](graphs_visualize.ipynb) and [MNIST-75sp and CIFAR-10-150sp](superpixels_visualize.ipynb).
 
-## Training models
+
+# Pretrained ChebyGIN models
+
+Click on the result to download a model in the PyTorch format.
+
+| Model                 | COLORS | TRIANGLES | MNIST-75sp | COLLAB | PROTEINS | D&D
+| --------------------- |:-------------:|:-------------:|:-------------:|:-------------:|:-------------:|:-------------:|
+| Script to train models | [colors.sh](scripts/colors.sh) | | | | | |
+| Global pooling |  |  | | | | |
+| Unsupervised attention |  |  | | | | |
+| Supervised attention |  |  | | | | |
+| Weakly-supervised attention |  |  | | | | | |
+
+./scripts/mnist_75sp.sh
+
+## Other examples of training models
 
 Hyperparameters should be tuned with the ```--validation``` flag.
 
@@ -67,8 +84,10 @@ See [plot_results.ipynb](plot_results.ipynb) for the example how to visualize re
 
 To run longer training:
 
-
 ### TRIANGLES
+
+GIN with GT attention
+ python main.py -D triangles --epochs 100 --lr_decay_step 85,95 --test_batch_size 100 -f 64,64,64 -K 1 --aggregation sum --n_hidden 64 --readout max  --dropout 0 --pool attn_gt_threshold_skip_0_skip --pool_arch gnn_curr  --results None -d /mnt/data/bknyazev/data/graph_data/node_colors_triangles/
 
 python main.py -D triangles --epochs 100 --lr_decay_step 85,95 --test_batch_size 100 -f 64,64,64 -K 7 --aggregation sum --n_hidden 64 --readout max  --dropout 0 --pool attn_sup_threshold_skip_0.01_0.01 --pool_arch gnn_curr  --results None -d /scratch/ssd/bknyazev/data/random/
 
@@ -95,6 +114,10 @@ Weakly supervised experiments on PROTEINS:
 DD:
 
 for folds in 10; do for n_nodes in 200; do for i in $(seq 1 1 10); do seed=$(( ( RANDOM % 10000 )  + 1 )); python main.py --seed $seed -D TU --cv_folds $folds --n_nodes $n_nodes --epochs 50 --lr_decay_step 25,35,45 --test_batch_size 10 -f 64,64,64 -K 3 --aggregation mean --n_hidden 0 --readout max --dropout 0.1 --pool attn_unsup_threshold_skip_skip_0 --pool_arch fc_prev_32 --results /mnt/data/bknyazev/checkpoints/ --data_dir /mnt/data/bknyazev/data/graph_data/DD | tee results/dd_unsup_"$n_nodes"nodes_"$folds"fold_fc32/dd_seed"$seed".log;  done; done; done
+
+
+
+
 
 # Reference
 

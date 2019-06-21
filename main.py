@@ -6,7 +6,6 @@ from torchvision import transforms
 from graphdata import *
 from train_test import *
 
-sys.stdout.flush()
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Run experiments with Graph Neural Networks')
@@ -14,7 +13,7 @@ def parse_args():
     parser.add_argument('-D', '--dataset', type=str, default='colors-3',
                         choices=['colors-3', 'colors-4', 'colors-8', 'colors-16', 'colors-32',
                                  'triangles', 'mnist', 'mnist-75sp', 'TU'],
-                        help='colors-n means the colors dataset with n-dimensional features: TU is any dataset from https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets')
+                        help='colors-n means the colors dataset with n-dimensional features; TU is any dataset from https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets')
     parser.add_argument('-d', '--data_dir', type=str, default='./data', help='path to the dataset')
     # Hyperparameters
     parser.add_argument('--epochs', type=int, default=100, help='# of the epochs')
@@ -33,7 +32,7 @@ def parse_args():
     parser.add_argument('--pool_arch', type=str, default=None, help='pooling layers architecture')
     # TU datasets arguments
     parser.add_argument('--n_nodes', type=int, default=25, help='maximum number of nodes in the training set for collab, proteins and dd')
-    parser.add_argument('--cv_folds', type=int, default=5, help='number of folds for cross-validating hyperparameters for collab, proteins and dd')
+    parser.add_argument('--cv_folds', type=int, default=10, help='number of folds for cross-validating hyperparameters for collab, proteins and dd')
     # Image datasets arguments
     parser.add_argument('--img_features', type=str, default='mean,coord', help='image features to use as node features')
     parser.add_argument('--img_noise_levels', type=str, default='0.4,0.6',
@@ -49,7 +48,7 @@ def parse_args():
     parser.add_argument('--results', type=str, default='./results', help='directory to save model checkpoints and other results, set to None to prevent saving anything')
     parser.add_argument('--resume', type=str, default=None, help='checkpoint to load the model and optimzer states from and continue training')
     parser.add_argument('--device', type=str, default='cuda', choices=['cuda', 'cpu'], help='cuda/cpu')
-    parser.add_argument('--seed', type=int, default=11, help='seed for shuffling nodes')
+    parser.add_argument('--seed', type=int, default=111, help='seed for shuffling nodes')
     parser.add_argument('--threads', type=int, default=0, help='number of threads for data loader')
     args = parser.parse_args()
 
@@ -67,7 +66,7 @@ def parse_args():
 
 
 def load_synthetic(args):
-    train_dataset = SyntheticGraphs(args.data_dir, args.dataset, 'train')
+    train_dataset = SyntheticGraphs(args.data_dir, args.dataset, 'train', attn_coef=args.alpha_ws)
     test_dataset = SyntheticGraphs(args.data_dir, args.dataset, 'val' if args.validation else 'test')
     loss_fn = mse_loss
     collate_fn = collate_batch
@@ -170,8 +169,11 @@ def load_TU(args, cv_folds=5):
             return pool
 
         val_acc = []
-        pool_thresh_values = np.array([1e-4, 1e-3, 2e-3, 5e-3, 1e-2, 3e-2, 5e-2, 1e-1])
-        if args.pool[1] == 'sup':
+        if args.debug:
+            pool_thresh_values = np.array([1e-4, 1e-1])
+        else:
+            pool_thresh_values = np.array([1e-4, 1e-3, 2e-3, 5e-3, 1e-2, 3e-2, 5e-2, 1e-1])
+        if args.pool[1] == 'sup' and not args.debug:
             kl_weight_values = np.array([0.1, 0.5, 1, 2, 10, 100])
         else:
             kl_weight_values = np.array([100])  # any value (ignored for unsupervised training)
@@ -228,7 +230,7 @@ if __name__ == '__main__':
     print('start time:', dt)
     print('gpus: ', torch.cuda.device_count())
     args = parse_args()
-    args.experiment_ID = '%s_%06d' % (platform.node(), dt.microsecond)
+    args.experiment_ID = '%06d' % dt.microsecond
     print('experiment_ID: ', args.experiment_ID)
 
     if args.results not in [None, 'None'] and not os.path.isdir(args.results):
@@ -259,7 +261,6 @@ if __name__ == '__main__':
 
     # Test function wrapper
     def test_fn(loader, epoch, split, eval_attn):
-        # eval_attn = (epoch == args.epochs) and args.eval_attn_test
         test_loss, acc, _ = test(model, loader, epoch, loss_fn, split, args, feature_stats,
                                noises=None, img_noise_level=None, eval_attn=eval_attn, alpha_WS_name='orig')
         if args.dataset in ['mnist', 'mnist-75sp'] and split == 'test':
@@ -276,8 +277,6 @@ if __name__ == '__main__':
         for epoch in range(start_epoch, args.epochs + 1):
             eval_epoch = epoch <= 1 or epoch == args.epochs  # check for epoch == 1 just to make sure that the test function works fine for this test set before training all the way until the last epoch
             scheduler.step()
-            # test_fn(train_loader_test, epoch, 'train', True)
-            # test_fn(test_loader, epoch, 'test', True)
             train_loss, acc = train(model, train_loader, optimizer, epoch, args, loss_fn, feature_stats)
             if eval_epoch:
                 save_checkpoint(model, scheduler, optimizer, args, epoch)

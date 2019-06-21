@@ -32,17 +32,17 @@ class ChebyGINLayer(nn.Module):
         self.n_hidden = n_hidden
         assert aggregation in ['mean', 'sum'], ('invalid aggregation', aggregation)
         self.aggregation = aggregation
-
+        self.activation = activation
         n_in = self.in_features * self.K
         if self.n_hidden == 0:
-            self.fc = nn.Sequential(nn.Linear(n_in, self.out_features),
-                                    activation)
+            fc = [nn.Linear(n_in, self.out_features)]
         else:
-            self.fc = nn.Sequential(nn.Linear(n_in, n_hidden),
-                                    nn.ReLU(True),
-                                    nn.Linear(n_hidden, self.out_features),
-                                    activation)
-
+            fc = [nn.Linear(n_in, n_hidden),
+                  nn.ReLU(True),
+                  nn.Linear(n_hidden, self.out_features)]
+        if activation is not None:
+            fc.append(activation)
+        self.fc = nn.Sequential(*fc)
         # print weight norms for reproducibility analysis
         print('ChebyGINLayer', list(self.fc.children())[0].weight.shape,
               torch.norm(list(self.fc.children())[0].weight, dim=1)[:10])
@@ -87,7 +87,7 @@ class ChebyGINLayer(nn.Module):
         if add_identity:
             A = A + torch.eye(N, device=A.get_device() if A.is_cuda else 'cpu').unsqueeze(0)
         D = torch.sum(A, 1)  # nodes degree (B,N)
-        D_hat = (D + 1e-7) ** (-0.5)
+        D_hat = (D + 1e-5) ** (-0.5)
         L = D_hat.view(B, N, 1) * A * D_hat.view(B, 1, N)  # B,N,N
         if not add_identity:
             L = -L  # for ChebyNet to make a valid Chebyshev basis
@@ -159,7 +159,7 @@ class ChebyGIN(nn.Module):
                  readout='max',
                  pool=None,  # Example: 'attn_gt_threshold_0_skip_skip'.split('_'),
                  pool_arch='fc_prev'.split('_'),
-                 large_graph=False,
+                 large_graph=False,  # > ~500 graphs
                  kl_weight=None,
                  graph_layer_fn=None,
                  debug=False):
@@ -174,11 +174,12 @@ class ChebyGIN(nn.Module):
 
         attn_gnn = None
         if graph_layer_fn is None:
-            graph_layer_fn = lambda n_in, n_out, K_, n_hidden_: ChebyGINLayer(in_features=n_in,
+            graph_layer_fn = lambda n_in, n_out, K_, n_hidden_, activation: ChebyGINLayer(in_features=n_in,
                                                                out_features=n_out,
                                                                K=K_,
                                                                n_hidden=n_hidden_,
-                                                               aggregation=aggregation)
+                                                               aggregation=aggregation,
+                                                               activation=activation)
             if self.pool_arch[0] == 'gnn':
                 attn_gnn = lambda n_in: ChebyGIN(in_features=n_in,
                                                  out_features=0,
@@ -203,7 +204,8 @@ class ChebyGIN(nn.Module):
                                                      debug=debug))
 
             # Graph "convolution" layers
-            graph_layers.append(graph_layer_fn(n_in, f, K, n_hidden))
+            graph_layers.append(graph_layer_fn(n_in, f, K, n_hidden,
+                                               None if self.out_features == 0 and layer == len(filters) - 1 else nn.ReLU(True)))  # no ReLU if the last layer and no fc layer after that
             n_prev = n_in
 
 

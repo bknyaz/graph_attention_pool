@@ -7,6 +7,9 @@ from utils import *
 
 
 class AttentionPooling(nn.Module):
+    '''
+    Graph pooling layer implementing top-k and threshold-based pooling.
+    '''
     def __init__(self,
                  in_features,  # feature dimensionality in the current graph layer
                  in_features_prev,  # feature dimensionality in the previous graph layer

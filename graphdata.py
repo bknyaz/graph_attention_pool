@@ -74,10 +74,7 @@ def collate_batch_images(batch, A, mask, use_mean_px=True, coord=None, gt_attn_t
 def collate_batch(batch):
     '''
     Creates a batch of same size graphs by zero-padding node features and adjacency matrices up to
-    the maximum number of nodes in the CURRENT batch rather than in the entire dataset.
-    Graphs in the batches are usually much smaller than the largest graph in the dataset, so this method is fast.
-    :param batch: batch in the PyTorch Geometric format or [node_features*batch_size, A*batch_size, label*batch_size]
-    :return: [node_features, A, graph_support, N_nodes, label]
+    the maximum number of nodes in the current batch rather than in the entire dataset.
     '''
 
     B = len(batch)

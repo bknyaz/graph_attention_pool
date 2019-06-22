@@ -13,6 +13,7 @@ import scipy.spatial
 import argparse
 import datetime
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Extract SLIC superpixels from images')
     parser.add_argument('-D', '--dataset', type=str, default='mnist', choices=['mnist', 'cifar10'])
@@ -32,6 +33,7 @@ def parse_args():
         print(arg, getattr(args, arg))
 
     return args
+
 
 def process_image(params):
     

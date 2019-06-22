@@ -1,4 +1,3 @@
-#import matplotlib.pyplot as plt  # uncomment to plot histograms
 import os
 import numpy as np
 import pickle
@@ -7,6 +6,7 @@ import networkx as nx
 import datetime
 import multiprocessing as mp
 from utils import *
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Generate synthetic graph datasets')

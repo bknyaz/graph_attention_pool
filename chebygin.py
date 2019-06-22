@@ -123,6 +123,9 @@ class ChebyGINLayer(nn.Module):
 
 
 class GraphReadout(nn.Module):
+    '''
+    Global pooling layer applied after the last graph layer.
+    '''
     def __init__(self,
                  pool_type):
         super(GraphReadout, self).__init__()
@@ -148,6 +151,9 @@ class GraphReadout(nn.Module):
 
 
 class ChebyGIN(nn.Module):
+    '''
+    Graph Neural Network class.
+    '''
     def __init__(self,
                  in_features,
                  out_features,

@@ -1,7 +1,5 @@
-import sys
 import argparse
 import datetime
-import platform
 from torchvision import transforms
 from graphdata import *
 from train_test import *

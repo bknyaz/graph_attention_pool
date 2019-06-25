@@ -2,6 +2,7 @@
 # https://scikit-image.org/docs/dev/api/skimage.segmentation.html#skimage.segmentation.slic
 
 import numpy as np
+import random
 import os
 import scipy
 import pickle
@@ -26,7 +27,7 @@ def parse_args():
                                                                       '(Balances color proximity and space proximity): '
                                                                       '0.25 is a good value for MNIST '
                                                                       'and 10 for color images like CIFAR-10')
-    parser.add_argument('--seed', type=int, default=11, help='seed for shuffling nodes')
+    parser.add_argument('--seed', type=int, default=111, help='seed for shuffling nodes')
     args = parser.parse_args()
 
     for arg in vars(args):
@@ -92,6 +93,7 @@ if __name__ == '__main__':
     if not os.path.isdir(args.out_dir):
         os.mkdir(args.out_dir)
 
+    random.seed(args.seed)
     np.random.seed(args.seed)  # to make node random permutation reproducible (not tested)
 
     # Read image data using torchvision

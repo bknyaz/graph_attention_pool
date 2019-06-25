@@ -4,6 +4,7 @@ import pickle
 import argparse
 import networkx as nx
 import datetime
+import random
 import multiprocessing as mp
 from utils import *
 
@@ -26,8 +27,8 @@ def parse_args():
     parser.add_argument('--green_ch_index', type=int, default=1,
                         help='index of non-zero value in a one-hot node feature vector, '
                              'i.e. [0, 1, 0] in case green_channel_index=1 and dim=3')
-    parser.add_argument('--seed', type=int, default=11, help='seed for shuffling nodes')
-    parser.add_argument('--threads', type=int, default=4, help='only for triangles')
+    parser.add_argument('--seed', type=int, default=111, help='seed for shuffling nodes')
+    parser.add_argument('--threads', type=int, default=0, help='only for triangles')
     args = parser.parse_args()
 
     for arg in vars(args):
@@ -217,6 +218,8 @@ if __name__ == '__main__':
     if not os.path.isdir(args.out_dir):
         os.mkdir(args.out_dir)
 
+    random.seed(args.seed)  # for networkx
+    np.random.seed(args.seed)
     rnd = np.random.RandomState(args.seed)
 
     def print_stats(data, split_name):

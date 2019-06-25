@@ -1,4 +1,5 @@
 import argparse
+import random
 import datetime
 from torchvision import transforms
 from graphdata import *
@@ -213,6 +214,7 @@ def load_TU(args, cv_folds=5):
 
 
 def set_seed(seed):
+    random.seed(seed)  # for some libraries
     rnd = np.random.RandomState(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = True

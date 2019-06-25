@@ -29,6 +29,98 @@ For TRIANGLES from top to bottom rows:
 
 Note that during training, our MNIST models have not encountered noisy images and our TRIANGLES models have not encountered graphs larger than with N=25 nodes.
 
+## Example of evaluating the model on MNIST
+
+For more examples, see [MNIST_eval_models](notebooks/MNIST_eval_models.ipynb) and
+[TRIANGLES_eval_models](notebooks/TRIANGLES_eval_models.ipynb).
+
+```python
+# Download model checkpoint or 'git clone' this repo
+import urllib.request
+# Let's use the model with supervised attention (other models can be found in the Table below)
+model_name = 'checkpoint_mnist-75sp_139255_epoch30_seed0000111.pth.tar'
+model_url = 'https://github.com/bknyaz/graph_attention_pool/raw/master/checkpoints/%s' % model_name
+model_path = 'checkpoints/%s' % model_name
+urllib.request.urlretrieve(model_url, model_path)
+```
+
+```python
+# Load the model
+import torch
+from chebygin import ChebyGIN
+
+state = torch.load(model_path)
+args = state['args']
+model = ChebyGIN(in_features=5, out_features=10, filters=args.filters, K=args.filter_scale,
+                 n_hidden=args.n_hidden, aggregation=args.aggregation, dropout=args.dropout,
+                 readout=args.readout, pool=args.pool, pool_arch=args.pool_arch)
+model.load_state_dict(state['state_dict'])
+model = model.eval()
+```
+
+```python
+# Load image using standard PyTorch Dataset
+from torchvision import datasets
+data = datasets.MNIST('./data', train=False, download=True)
+images = (data.test_data.numpy() / 255.)
+import numpy as np
+img = images[0].astype(np.float32)  # 28x28 MNIST image
+```
+
+```python
+# Extract superpixels and create node features
+import scipy.ndimage
+from skimage.segmentation import slic
+from scipy.spatial.distance import cdist
+
+# The number (n_segments) of superpixels returned by SLIC is usually smaller than requested, so we request more
+superpixels = slic(img, n_segments=95, compactness=0.25, multichannel=False)
+sp_indices = np.unique(superpixels)
+n_sp = len(sp_indices)  # should be 74 with these parameters of slic
+
+sp_intensity = np.zeros((n_sp, 1), np.float32)
+sp_coord = np.zeros((n_sp, 2), np.float32)  # row, col
+for seg in sp_indices:
+    mask = superpixels == seg
+    sp_intensity[seg] = np.mean(img[mask])
+    sp_coord[seg] = np.array(scipy.ndimage.measurements.center_of_mass(mask))
+
+# The model is invariant to the order of nodes in a graph
+# We can shuffle nodes and obtain exactly the same results
+ind = np.random.permutation(n_sp)
+sp_coord = sp_coord[ind]
+sp_intensity = sp_intensity[ind]
+```
+
+```python
+# Create edges between nodes in the form of adjacency matrix
+sp_coord = sp_coord / images.shape[1]
+dist = cdist(sp_coord, sp_coord)  # distance between all pairs of nodes
+sigma = 0.1 * np.pi  # width of a Guassian
+A = np.exp(- dist / sigma ** 2)  # transform distance to spatial closeness
+A[np.diag_indices_from(A)] = 0  # remove self-loops
+A = torch.from_numpy(A).float().unsqueeze(0)
+```
+
+```python
+# Prepare an input to the model and process it
+N_nodes = sp_intensity.shape[0]
+mask = torch.ones(1, N_nodes, dtype=torch.uint8)
+
+# mean and std computed for superpixel features in the training set
+mn = torch.tensor([0.11225057, 0.11225057, 0.11225057, 0.44206527, 0.43950436]).view(1, 1, -1)
+sd = torch.tensor([0.2721889,  0.2721889,  0.2721889,  0.2987583,  0.30080357]).view(1, 1, -1)
+
+node_features = (torch.from_numpy(np.pad(np.concatenate((sp_intensity, sp_coord), axis=1),
+                                         ((0, 0), (2, 0)), 'edge')).unsqueeze(0) - mn) / sd    
+
+y, other_outputs = model([node_features, A, mask, None, {'N_nodes': torch.zeros(1, 1) + N_nodes}])
+alpha = other_outputs['alpha'][0].data
+```
+
+- `y` is a vector with 10 unnormalized class scores. To get a predicted label, we can use ```torch.argmax(y)```.
+
+- `alpha` is a vector of attention coefficients alpha for each node.
 
 ## Tasks & Datasets
 
@@ -48,11 +140,11 @@ For COLORS, TRIANGLES and MNIST we know ground truth attention for nodes, which 
 To generate all data using a single command: ```./scripts/prepare_data.sh```.
 
 All generated/downloaded ata will be stored in the local ```./data``` directory.
-It can take 1-2 hours to prepare all data.
+It can take about 1 hour to prepare all data (see my [log](logs/prepare_data.log)) and all data take about 2 GB.
 
 Alternatively, you can generate data for each task as described below.
 
-In case of any issues with running these scripts, they can be downloaded from [here](https://drive.google.com/drive/folders/1Prc-n9Nr8-5z-xphdRScftKKIxU4Olzh?usp=sharing).
+In case of any issues with running these scripts, data can be downloaded from [here](https://drive.google.com/drive/folders/1Prc-n9Nr8-5z-xphdRScftKKIxU4Olzh?usp=sharing).
 
 ### COLORS
 To generate training, validation and test data for our **Colors** dataset with different dimensionalities:

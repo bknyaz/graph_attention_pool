@@ -197,12 +197,21 @@ Example of running 10 weakly-supervised experiments on PROTEINS with cross-valid
 
 # Reference
 
-Please cite our paper if you use our data or code.
+Please cite our paper if you use our data or code:
+
+```
+@article{knyazev2019understanding,
+  title = {Understanding Attention and Generalization in Graph Neural Networks},
+  author = {Knyazev, Boris and Taylor, Graham W and Amer, Mohamed R},
+  journal = {arXiv preprint arXiv:1905.02850},
+  year = {2019}
+}
+```
 
 ```
 @inproceedings{knyazev2019understanding,
   author = {Boris Knyazev and Graham Taylor and Mohamed Amer},
-  title = {Understanding Attention and Generalization in Graph Neural Networks},
+  title = {Understanding Attention in Graph Neural Networks},
   booktitle = {International Conference on Learning Representations (ICLR) Workshop on Representation Learning on Graphs and Manifolds},
   year = 2019,
   pdf = {http://arxiv.org/abs/1905.02850}

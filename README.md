@@ -195,6 +195,18 @@ Example of running 10 weakly-supervised experiments on PROTEINS with cross-valid
 ```for i in $(seq 1 1 10); do seed=$(( ( RANDOM % 10000 )  + 1 )); python main.py --seed $seed -D TU --n_nodes 25 --epochs 50 --lr_decay_step 25,35,45 --test_batch_size 100 -f 64,64,64 -K 3 --aggregation mean --n_hidden 0 --readout max --dropout 0.1 --pool attn_sup_threshold_skip_skip_0 --pool_arch fc_prev --results ./checkpoints --data_dir ./data/PROTEINS | tee logs/proteins_wsup_seed"$seed".log; done```
 
 
+# Requirements
+
+Python packages required (can be installed via pip or conda):
+
+- python 3.6
+- PyTorch >= 0.4.1
+- networkx
+- OpenCV
+- SciPy
+- scikit-image
+- scikit-learn
+
 # Reference
 
 Please cite our paper if you use our data or code:

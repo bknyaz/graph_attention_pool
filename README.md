@@ -29,7 +29,18 @@ For TRIANGLES from top to bottom rows:
 
 Note that during training, our MNIST models have not encountered noisy images and our TRIANGLES models have not encountered graphs larger than with N=25 nodes.
 
-## Example of evaluating the model on MNIST
+
+## Examples using [PyTorch Geometric](https://github.com/rusty1s/pytorch_geometric)
+
+<a href="https://github.com/rusty1s/pytorch_geometric">
+<img src="https://raw.githubusercontent.com/rusty1s/pytorch_geometric/master/docs/source/_static/img/pyg_logo_text.svg?sanitize=true" height="64">
+</a>
+
+COLORS and TRIANGLES datasets are now also available in the [TU](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets) format, so that you can use a general TU datareader. See PyTorch Geometric examples for
+[COLORS](https://github.com/rusty1s/pytorch_geometric/blob/master/examples/colors_topk_pool.py) and [TRIANGLES](https://github.com/rusty1s/pytorch_geometric/blob/master/examples/triangles_sag_pool.py).
+
+
+## Example of evaluating a pretrained model on MNIST
 
 For more examples, see [MNIST_eval_models](notebooks/MNIST_eval_models.ipynb) and
 [TRIANGLES_eval_models](notebooks/TRIANGLES_eval_models.ipynb).
@@ -199,7 +210,7 @@ Example of running 10 weakly-supervised experiments on PROTEINS with cross-valid
 
 Python packages required (can be installed via pip or conda):
 
-- python 3.6
+- python >= 3.6.1
 - PyTorch >= 0.4.1
 - networkx
 - OpenCV

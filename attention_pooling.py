@@ -19,6 +19,8 @@ class AttentionPooling(nn.Module):
                  attn_gnn=None,
                  kl_weight=None,
                  drop_nodes=True,
+                 init='normal',
+                 scale=None,
                  debug=False):
         super(AttentionPooling, self).__init__()
         self.pool_type = pool_type
@@ -28,8 +30,11 @@ class AttentionPooling(nn.Module):
         self.proj = None
         self.drop_nodes = drop_nodes
         self.is_topk = self.pool_type[2].lower() == 'topk'
+        self.scale =scale
+        self.init = init
         self.debug = debug
         self.clamp_value = 60
+        self.torch = torch.__version__
         if self.is_topk:
             self.topk_ratio = float(self.pool_type[3])  # r
             assert self.topk_ratio > 0 and self.topk_ratio <= 1, ('invalid top-k ratio', self.topk_ratio, self.pool_type)
@@ -46,7 +51,18 @@ class AttentionPooling(nn.Module):
                 if len(self.pool_arch) == 2:
                     # single layer projection
                     self.proj = nn.Linear(n_in, 1, bias=False)
-                    self.proj.weight.data = torch.randn(n_in).view_as(self.proj.weight.data)  # seed 9753 for optimal initialization
+                    p = self.proj.weight.data
+                    if scale is not None:
+                        if init == 'normal':
+                            p = torch.randn(n_in)  # std=1, seed 9753 for optimal initialization
+                        elif init == 'uniform':
+                            p = torch.rand(n_in) * 2 - 1  # [-1,1]
+                        else:
+                            raise NotImplementedError(init)
+                        p *= scale  # multiply std for normal or change range for uniform
+                    else:
+                        print('Default PyTorch init is used for layer %s, std=%.3f' % (str(p.shape), p.std()))
+                    self.proj.weight.data = p.view_as(self.proj.weight.data)
                     p = self.proj.weight.data.view(1, n_in)
                 else:
                     # multi-layer projection
@@ -57,7 +73,19 @@ class AttentionPooling(nn.Module):
                                                    out_features=filters[layer]))
                         if layer == 0:
                             p = self.proj[0].weight.data
-                        self.proj.append(nn.ReLU(True))
+                            if scale is not None:
+                                if init == 'normal':
+                                    p = torch.randn(filters[layer], n_in)
+                                elif init == 'uniform':
+                                    p = torch.rand(filters[layer], n_in) * 2 - 1  # [-1,1]
+                                else:
+                                    raise NotImplementedError(init)
+                                p *= scale  # multiply std for normal or change range for uniform
+                            else:
+                                print('Default PyTorch init is used for layer %s, std=%.3f' % (str(p.shape), p.std()))
+                            self.proj[0].weight.data = p.view_as(self.proj[0].weight.data)
+                            p = self.proj[0].weight.data.view(-1, n_in)
+                            self.proj.append(nn.ReLU(True))
 
                     self.proj.append(nn.Linear(filters[-1], 1))
                     self.proj = nn.Sequential(*self.proj)
@@ -84,11 +112,14 @@ class AttentionPooling(nn.Module):
             raise NotImplementedError(self.pool_type[1])
 
     def __repr__(self):
-        return 'AttentionPooling(pool_type={}, pool_arch={}, topk={}, kl_weight={}, proj={})'.format(self.pool_type,
-                                                                                                     self.pool_arch,
-                                                                                                     self.is_topk,
-                                                                                                     self.kl_weight,
-                                                                                                     self.proj)
+        return 'AttentionPooling(pool_type={}, pool_arch={}, topk={}, kl_weight={}, init={}, scale={}, proj={})'.format(
+            self.pool_type,
+            self.pool_arch,
+            self.is_topk,
+            self.kl_weight,
+            self.init,
+            self.scale,
+            self.proj)
 
     def cosine_sim(self, a, b):
         return torch.mm(a, b.t()) / (torch.norm(a, dim=1, keepdim=True) * torch.norm(b, dim=1, keepdim=True))
@@ -103,7 +134,7 @@ class AttentionPooling(nn.Module):
         if N_nodes_max > 0:
             B, N, C = x.shape
             # Drop nodes
-            mask, idx = torch.topk(mask, N_nodes_max, dim=1, largest=True, sorted=False)
+            mask, idx = torch.topk(mask.byte(), N_nodes_max, dim=1, largest=True, sorted=False)
             x = torch.gather(x, dim=1, index=idx.unsqueeze(2).expand(-1, -1, C))
             # Drop edges
             A = torch.gather(A, dim=1, index=idx.unsqueeze(2).expand(-1, -1, N))
@@ -119,6 +150,7 @@ class AttentionPooling(nn.Module):
         mask_float = mask.float()
         N_nodes_float = params_dict['N_nodes'].float()
         B, N, C = x.shape
+        A = A.view(B, N, N)
         alpha_gt = None
         if 'node_attn' in params_dict:
             if not isinstance(params_dict['node_attn'], list):
@@ -136,12 +168,20 @@ class AttentionPooling(nn.Module):
             if self.pool_arch[0] == 'fc':
                 alpha_pre = self.proj(attn_input).view(B, N)
             else:
-                alpha_pre = self.proj([attn_input, *data[1:]])[0].view(B, N)
+                # to support python2
+                input = [attn_input]
+                input.extend(data[1:])
+                alpha_pre = self.proj(input)[0].view(B, N)
             # softmax with masking out dummy nodes
             alpha_pre = torch.clamp(alpha_pre, -self.clamp_value, self.clamp_value)
             alpha = normalize_batch(self.mask_out(torch.exp(alpha_pre), mask_float).view(B, N))
             if self.pool_type[1] == 'sup' and self.training:
-                KL_loss_per_node = self.mask_out(F.kl_div(torch.log(alpha + 1e-14), alpha_gt, reduction='none'), mask_float.view(B,N))
+                if self.torch.find('1.') == 0:
+                    KL_loss_per_node = self.mask_out(F.kl_div(torch.log(alpha + 1e-14), alpha_gt, reduction='none'),
+                                                     mask_float.view(B,N))
+                else:
+                    KL_loss_per_node = self.mask_out(F.kl_div(torch.log(alpha + 1e-14), alpha_gt, reduce=False),
+                                                     mask_float.view(B, N))
                 KL_loss = self.kl_weight * torch.mean(KL_loss_per_node.sum(dim=1) / (N_nodes_float + 1e-7))  # mean over nodes, then mean over batches
         else:
             alpha = alpha_gt
@@ -205,4 +245,6 @@ class AttentionPooling(nn.Module):
                     params_dict[key] = []
                 params_dict[key].append(values.detach())
 
-        return [x, A, mask, *data[3:]]
+        output = [x, A, mask]
+        output.extend(data[3:])
+        return output

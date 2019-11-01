@@ -4,7 +4,10 @@ import torch
 import copy
 from graphdata import *
 import torch.nn.functional as F
+from torchvision import datasets, transforms
 from sklearn.metrics import roc_auc_score
+import numbers
+import random
 
 
 def load_save_noise(f, noise_shape):
@@ -56,8 +59,8 @@ def count_correct(output, target, N_nodes=None, N_nodes_min=0, N_nodes_max=25):
     else:
         # Classification
         pred = output.max(1, keepdim=True)[1]
-    target = target.long().squeeze()
-    pred = pred.squeeze()
+    target = target.long().squeeze().cpu()  # for older pytorch
+    pred = pred.squeeze().cpu()  # for older pytorch
     if N_nodes is not None:
         idx = (N_nodes >= N_nodes_min) & (N_nodes <= N_nodes_max)
         if idx.sum() > 0:
@@ -110,19 +113,27 @@ def normalize_batch(x, dim=1, eps=1e-7):
     return x / (x.sum(dim=dim, keepdim=True) + eps)
 
 
-def normalize_zero_one(im):
+def normalize_zero_one(im, eps=1e-7):
     m1 = im.min()
     m2 = im.max()
-    return (im - m1) / (m2 - m1)
+    return (im - m1) / (m2 - m1 + eps)
 
 
-def mse_loss(target, output, reduction='mean'):
-    if reduction == 'mean':
-        return torch.mean((target.float().squeeze() - output.float().squeeze()) ** 2)
-    elif reduction == 'sum':
-        return torch.sum((target.float().squeeze() - output.float().squeeze()) ** 2)
+def mse_loss(target, output, reduction='mean', reduce=None):
+    loss = (target.float().squeeze() - output.float().squeeze()) ** 2
+    if reduce is None:
+        if reduction == 'mean':
+            return torch.mean(loss)
+        elif reduction == 'sum':
+            return torch.sum(loss)
+        elif reduction == 'none':
+            return loss
+        else:
+            NotImplementedError(reduction)
+    elif not reduce:
+        return loss
     else:
-        NotImplementedError(reduction)
+        NotImplementedError('use reduction if reduce=True')
 
 
 def shuffle_nodes(batch):
@@ -159,26 +170,42 @@ def sanity_check(model, data):
     print('model is checked for nodes shuffling')
 
 
+def set_seed(seed, seed_data=None):
+    random.seed(seed)  # for some libraries
+    rnd = np.random.RandomState(seed)
+    if seed_data is not None:
+        rnd_data = np.random.RandomState(seed_data)
+    else:
+        rnd_data = rnd
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = True
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    return rnd, rnd_data
+
+
 def compute_feature_stats(model, train_loader, device, n_batches=100):
     print('computing mean and std of input features')
     model.eval()
     x = []
     with torch.no_grad():
         for batch_idx, data in enumerate(train_loader):
-            x.append(data[0].data) # B,N,F
+            x.append(data[0].data.cpu().numpy()) # B,N,F
             if batch_idx > n_batches:
                 break
-    x = torch.cat(x, dim=1).view(-1, x[0].shape[-1])  # M,N,C
+    x = np.concatenate(x, axis=1).reshape(-1, x[0].shape[-1])
     print('features shape loaded', x.shape)
 
-    mn = x.mean(dim=0, keepdim=True)
-    sd = x.std(dim=0, keepdim=True)
-    print('mn', mn.data.cpu().numpy())
-    print('std', sd.data.cpu().numpy())
+    mn = x.mean(axis=0, keepdims=True)
+    sd = x.std(axis=0, keepdims=True)
+    print('mn', mn)
+    print('std', sd)
     sd[sd < 1e-2] = 1  # to prevent dividing by a small number
-    print('corrected (non zeros) std', sd.data.cpu().numpy())
-    mn = mn.to(device)
-    sd = sd.to(device)
+    print('corrected (non zeros) std', sd)#.data.cpu().numpy())
+    
+    mn = torch.from_numpy(mn).float().to(device).unsqueeze(0)
+    sd = torch.from_numpy(sd).float().to(device).unsqueeze(0)
     return mn, sd
 
 

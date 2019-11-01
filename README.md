@@ -1,10 +1,10 @@
 # Intro
 
-This repository contains code to generate data and reproduce experiments from our paper:
+This repository contains code to generate data and reproduce experiments from our NeurIPS 2019 paper:
 
 [Boris Knyazev, Graham W. Taylor, Mohamed R. Amer. Understanding Attention and Generalization in Graph Neural Networks](https://arxiv.org/abs/1905.02850).
 
-[An earlier short version](https://rlgm.github.io/papers/54.pdf) of our paper was presented as a contributed talk at [ICLR Workshop on Representation Learning on Graphs and Manifolds, 2019](https://rlgm.github.io/cfp/).
+[An earlier short version](https://rlgm.github.io/papers/54.pdf) of our paper was presented as a **contributed talk** at [ICLR Workshop on Representation Learning on Graphs and Manifolds, 2019](https://rlgm.github.io/cfp/).
 
 
 **Update:** For COLLAB, PROTEINS and D&D for hyperparameter tuning we do a grid search in this repo, but we will release code using Bayesian optimization implemented in [Ax](https://github.com/facebook/Ax) soon, which shows better and more stable results.
@@ -202,12 +202,21 @@ Examples of evaluating our trained models can be found in notebooks: [MNIST_eval
 
 To tune hyperparameters on the validation set for COLORS, TRIANGLES and MNIST, use the ```--validation``` flag.
 
-For COLLAB, PROTEINS and D&D tuning of hyperparameters is included in the training script.
+For COLLAB, PROTEINS and D&D tuning of hyperparameters is included in the training script. Use the `--ax` flag.
 
-Example of running 10 weakly-supervised experiments on PROTEINS with cross-validation of hyperparameters:
+Example of running 10 weakly-supervised experiments on **PROTEINS** with cross-validation of hyperparameters *including initialization parameters (distribution and scale) of the attention model* (the `--tune_init` flag):
 
-```for i in $(seq 1 1 10); do seed=$(( ( RANDOM % 10000 )  + 1 )); python main.py --seed $seed -D TU --n_nodes 25 --epochs 50 --lr_decay_step 25,35,45 --test_batch_size 100 -f 64,64,64 -K 3 --aggregation mean --n_hidden 0 --readout max --dropout 0.1 --pool attn_sup_threshold_skip_skip_0 --pool_arch fc_prev --results ./checkpoints --data_dir ./data/PROTEINS | tee logs/proteins_wsup_seed"$seed".log; done```
+```
+for i in $(seq 1 1 10); do dataseed=$(( ( RANDOM % 10000 ) + 1 )); for j in $(seq 1 1 10); do seed=$(( ( RANDOM % 10000 ) + 1 )); python main.py --seed $seed -D TU --n_nodes 25 --epochs 50 --lr_decay_step 25,35,45 --test_batch_size 100 -f 64,64,64 -K 1 --readout max --dropout 0.1 --pool attn_sup_threshold_skip_skip_0 --pool_arch fc_prev --results None --data_dir ./data/PROTEINS --seed_data $dataseed --cv --cv_folds 5 --cv_threads 5 --ax --ax_trials 30 --scale None --tune_init | tee logs/proteins_wsup_"$dataseed"_"$seed".log; done; done
+```
 
+No initialization tuning on **COLLAB**:
+
+```
+for i in $(seq 1 1 10); do dataseed=$(( ( RANDOM % 10000 ) + 1 )); for j in $(seq 1 1 10); do seed=$(( ( RANDOM % 10000 ) + 1 )); python main.py --seed $seed -D TU --n_nodes 35 --epochs 50 --lr_decay_step 25,35,45 --test_batch_size 32 -f 64,64,64 -K 3 --readout max --dropout 0.1 --pool attn_sup_threshold_skip_skip_skip_0 --pool_arch fc_prev --results None --data_dir ./data/COLLAB --seed_data $dataseed --cv --cv_folds 5 --cv_threads 5 --ax --ax_trials 30 --scale None | tee logs/collab_wsup_"$dataseed"_"$seed".log; done; done
+```
+
+Note that results can be better if using `--pool_arch gnn_prev`, but we didn't focus on that.
 
 # Requirements
 
@@ -215,6 +224,7 @@ Python packages required (can be installed via pip or conda):
 
 - python >= 3.6.1
 - PyTorch >= 0.4.1
+- [Ax](https://github.com/facebook/Ax) for hyper-parameter tuning on COLLAB, PROTEINS and D\&D 
 - networkx
 - OpenCV
 - SciPy

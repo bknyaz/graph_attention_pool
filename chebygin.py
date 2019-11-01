@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from attention_pooling import *
+from utils import *
 
 
 class ChebyGINLayer(nn.Module):
@@ -22,10 +23,12 @@ class ChebyGINLayer(nn.Module):
                  K,
                  n_hidden=0,
                  aggregation='mean',
-                 activation=nn.ReLU(True)):
+                 activation=nn.ReLU(True),
+                 n_relations=1):
         super(ChebyGINLayer, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
+        self.n_relations = n_relations
         assert K > 0, 'order is assumed to be > 0'
         self.K = K
         assert n_hidden >= 0, ('invalid n_hidden value', n_hidden)
@@ -33,7 +36,7 @@ class ChebyGINLayer(nn.Module):
         assert aggregation in ['mean', 'sum'], ('invalid aggregation', aggregation)
         self.aggregation = aggregation
         self.activation = activation
-        n_in = self.in_features * self.K
+        n_in = self.in_features * self.K * n_relations
         if self.n_hidden == 0:
             fc = [nn.Linear(n_in, self.out_features)]
         else:
@@ -43,7 +46,6 @@ class ChebyGINLayer(nn.Module):
         if activation is not None:
             fc.append(activation)
         self.fc = nn.Sequential(*fc)
-        # print weight norms for reproducibility analysis
         print('ChebyGINLayer', list(self.fc.children())[0].weight.shape,
               torch.norm(list(self.fc.children())[0].weight, dim=1)[:10])
 
@@ -98,28 +100,38 @@ class ChebyGINLayer(nn.Module):
         B, N, F = x.shape
         assert N == A.shape[1] == A.shape[2], ('invalid shape', N, x.shape, A.shape)
 
-        D, L = self.laplacian_batch(A, add_identity=self.K == 1)  # for the first layer this can be done at the preprocessing stage
-        y = self.chebyshev_basis(L, x, self.K)  # B,N,K,F
+        if len(A.shape) == 3:
+            A = A.unsqueeze(3)
 
-        if self.aggregation == 'sum':
-            # Sum features of neighbors
-            if self.K == 1:
-                # GIN
-                y = y * D.view(B, N, 1, 1)
-            else:
-                # ChebyGIN
-                D_GIN = torch.ones(B, N, self.K, device=x.get_device() if x.is_cuda else 'cpu')
-                D_GIN[:, :, 1:] = D.view(B, N, 1).expand(-1, -1, self.K - 1)  # keep self-loop features the same
-                y = y * D_GIN.view(B, N, self.K, 1)  # apply summation for other scales
+        y_out = []
+        for rel in range(A.shape[3]):
+            D, L = self.laplacian_batch(A[:, :, :, rel], add_identity=self.K == 1)  # for the first layer this can be done at the preprocessing stage
+            y = self.chebyshev_basis(L, x, self.K)  # B,N,K,F
 
+            if self.aggregation == 'sum':
+                # Sum features of neighbors
+                if self.K == 1:
+                    # GIN
+                    y = y * D.view(B, N, 1, 1)
+                else:
+                    # ChebyGIN
+                    D_GIN = torch.ones(B, N, self.K, device=x.get_device() if x.is_cuda else 'cpu')
+                    D_GIN[:, :, 1:] = D.view(B, N, 1).expand(-1, -1, self.K - 1)  # keep self-loop features the same
+                    y = y * D_GIN.view(B, N, self.K, 1)  # apply summation for other scales
+
+            y_out.append(y)
+
+        y = torch.cat(y_out, dim=2)
         y = self.fc(y.view(B, N, -1))  # B,N,F
 
         if len(mask.shape) == 2:
             mask = mask.unsqueeze(2)
 
         y = y * mask.float()
+        output = [y, A, mask]
+        output.extend(data[3:] + [x])  # for python2
 
-        return [y, A, mask, *data[3:], x]
+        return output
 
 
 class GraphReadout(nn.Module):
@@ -135,7 +147,7 @@ class GraphReadout(nn.Module):
             self.readout_layer = lambda x, mask: torch.max(x, dim=dim)[0]
         elif pool_type in ['avg', 'mean']:
             # sum over all nodes, then divide by the number of valid nodes in each sample of the batch
-            self.readout_layer = lambda x, mask: torch.sum(x, dim=dim) / torch.sum(mask, dim=1, keepdim=True)
+            self.readout_layer = lambda x, mask: torch.sum(x, dim=dim) / torch.sum(mask, dim=dim).float()
         elif pool_type in ['sum']:
             self.readout_layer = lambda x, mask: torch.sum(x, dim=dim)
         else:
@@ -146,8 +158,11 @@ class GraphReadout(nn.Module):
 
     def forward(self, data):
         x, A, mask = data[:3]
-        x = self.readout_layer(x, mask)
-        return [x, *data[1:]]
+        B, N = x.shape[:2]
+        x = self.readout_layer(x, mask.view(B, N, 1))
+        output = [x]
+        output.extend(data[1:])   # [x, *data[1:]] doesn't work in Python2
+        return output
 
 
 class ChebyGIN(nn.Module):
@@ -168,6 +183,8 @@ class ChebyGIN(nn.Module):
                  large_graph=False,  # > ~500 graphs
                  kl_weight=None,
                  graph_layer_fn=None,
+                 init='normal',
+                 scale=None,
                  debug=False):
         super(ChebyGIN, self).__init__()
         self.out_features = out_features
@@ -186,7 +203,7 @@ class ChebyGIN(nn.Module):
                                                                n_hidden=n_hidden_,
                                                                aggregation=aggregation,
                                                                activation=activation)
-            if self.pool_arch[0] == 'gnn':
+            if self.pool_arch is not None and self.pool_arch[0] == 'gnn':
                 attn_gnn = lambda n_in: ChebyGIN(in_features=n_in,
                                                  out_features=0,
                                                  filters=[32, 32, 1],
@@ -195,7 +212,8 @@ class ChebyGIN(nn.Module):
                                                  graph_layer_fn=graph_layer_fn)
 
         graph_layers = []
-        for layer, f in enumerate(filters):
+
+        for layer, f in enumerate(filters + [None]):
 
             n_in = in_features if layer == 0 else filters[layer - 1]
             # Pooling layers
@@ -207,13 +225,16 @@ class ChebyGIN(nn.Module):
                                                      large_graph=large_graph,
                                                      kl_weight=kl_weight,
                                                      attn_gnn=attn_gnn,
+                                                     init=init,
+                                                     scale=scale,
                                                      debug=debug))
 
-            # Graph "convolution" layers
-            graph_layers.append(graph_layer_fn(n_in, f, K, n_hidden,
-                                               None if self.out_features == 0 and layer == len(filters) - 1 else nn.ReLU(True)))  # no ReLU if the last layer and no fc layer after that
-            n_prev = n_in
-
+            if f is not None:
+                # Graph "convolution" layers
+                # no ReLU if the last layer and no fc layer after that
+                graph_layers.append(graph_layer_fn(n_in, f, K, n_hidden,
+                                                   None if self.out_features == 0 and layer == len(filters) - 1 else nn.ReLU(True)))
+                n_prev = n_in
 
         if self.out_features > 0:
             # Global pooling over nodes
@@ -223,7 +244,6 @@ class ChebyGIN(nn.Module):
         if self.out_features > 0:
             # Fully connected (classification/regression) layers
             self.fc = nn.Sequential(*(([nn.Dropout(p=dropout)] if dropout > 0 else []) + [nn.Linear(filters[-1], out_features)]))
-
 
     def forward(self, data):
         data = self.graph_layers(data)

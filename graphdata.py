@@ -12,11 +12,10 @@ from scipy.spatial.distance import cdist
 from utils import *
 
 
-def comput_adjacency_matrix_images(coord):
+def compute_adjacency_matrix_images(coord, sigma=0.1):
     coord = coord.reshape(-1, 2)
     dist = cdist(coord, coord)
-    sigma = 0.1 * np.pi
-    A = np.exp(- dist / sigma ** 2)
+    A = np.exp(- dist / (sigma * np.pi) ** 2)
     A[np.diag_indices_from(A)] = 0
     return A
 
@@ -24,13 +23,14 @@ def comput_adjacency_matrix_images(coord):
 def precompute_graph_images(img_size):
     col, row = np.meshgrid(np.arange(img_size), np.arange(img_size))
     coord = np.stack((col, row), axis=2) / img_size  # 28,28,2
-    A = torch.from_numpy(comput_adjacency_matrix_images(coord)).float().unsqueeze(0)
+    A = torch.from_numpy(compute_adjacency_matrix_images(coord)).float().unsqueeze(0)
     coord = torch.from_numpy(coord).float().unsqueeze(0).view(1, -1, 2)
     mask = torch.ones(1, img_size * img_size, dtype=torch.uint8)
     return A, coord, mask
 
 
-def collate_batch_images(batch, A, mask, use_mean_px=True, coord=None, gt_attn_threshold=0):
+def collate_batch_images(batch, A, mask, use_mean_px=True, coord=None,
+                         gt_attn_threshold=0, replicate_features=True):
     B = len(batch)
     C, H, W = batch[0][0].shape
     N_nodes = H * W
@@ -64,9 +64,13 @@ def collate_batch_images(batch, A, mask, use_mean_px=True, coord=None, gt_attn_t
     if x is None:
         x = torch.ones(B, N_nodes, 1)  # dummy features
 
-    x = F.pad(x, (2, 0), 'replicate')
+    if replicate_features:
+        x = F.pad(x, (2, 0), 'replicate')
 
-    labels = torch.stack([batch[b][1] for b in range(B)])
+    try:
+        labels = torch.Tensor([batch[b][1] for b in range(B)]).long()
+    except:
+        labels = torch.stack([batch[b][1] for b in range(B)]).long()
 
     return [x, A.expand(B, -1, -1), mask.expand(B, -1), labels, params_dict]
 
@@ -82,7 +86,7 @@ def collate_batch(batch):
     C = batch[0][0].shape[1]
     N_nodes_max = int(np.max(N_nodes))
 
-    mask = torch.zeros(B, N_nodes_max, dtype=torch.uint8)
+    mask = torch.zeros(B, N_nodes_max, dtype=torch.bool)  # use byte for older PyTorch
     A = torch.zeros(B, N_nodes_max, N_nodes_max)
     x = torch.zeros(B, N_nodes_max, C)
     has_GT_attn = len(batch[0]) > 4 and batch[0][4] is not None
@@ -147,6 +151,7 @@ class MNIST75sp(torch.utils.data.Dataset):
                  gt_attn_threshold=0,
                  attn_coef=None):
 
+        self.data_dir = data_dir
         self.split = split
         self.is_test = split.lower() in ['test', 'val']
         with open(pjoin(data_dir, 'mnist_75sp_%s.pkl' % split), 'rb') as f:
@@ -169,13 +174,13 @@ class MNIST75sp(torch.utils.data.Dataset):
         self.labels = self.labels[samples_idx]
         self.n_samples = len(self.labels)
 
-    def precompute_graph_images(self):
+    def precompute_graph_data(self, replicate_features, threads=0):
         print('precompute all data for the %s set...' % self.split.upper())
         self.Adj_matrices, self.node_features, self.GT_attn, self.WS_attn = [], [], [], []
         for index, sample in enumerate(self.sp_data):
             mean_px, coord = sample[:2]
             coord = coord / self.img_size
-            A = comput_adjacency_matrix_images(coord)
+            A = compute_adjacency_matrix_images(coord)
             N_nodes = A.shape[0]
             x = None
             if self.use_mean_px:
@@ -188,7 +193,8 @@ class MNIST75sp(torch.utils.data.Dataset):
                     x = coord
             if x is None:
                 x = np.ones(N_nodes, 1)  # dummy features
-            x = np.pad(x, ((0, 0), (2, 0)), 'edge')  # replicate features to make it possible to test on colored images
+            if replicate_features:
+                x = np.pad(x, ((0, 0), (2, 0)), 'edge')  # replicate features to make it possible to test on colored images
             if self.gt_attn_threshold == 0:
                 gt_attn = (mean_px > 0).astype(np.float32)
             else:
@@ -226,9 +232,13 @@ class SyntheticGraphs(torch.utils.data.Dataset):
                  data_dir,
                  dataset,
                  split,
-                 attn_coef=None):
+                 degree_feature=True,
+                 attn_coef=None,
+                 threads=12):
 
         self.is_test = split.lower() in ['test', 'val']
+        self.split = split
+        self.degree_feature = degree_feature
 
         if dataset.find('colors') >= 0:
             dim = int(dataset.split('-')[1])
@@ -258,9 +268,14 @@ class SyntheticGraphs(torch.utils.data.Dataset):
             self.node_features = []
             for i in range(len(data['Adj_matrices'])):
                 N = data['Adj_matrices'][i].shape[0]
-                D_onehot = np.zeros((N, self.feature_dim ))
-                D_onehot[np.arange(N), self.Node_degrees[i]] = 1
+                if degree_feature:
+                    D_onehot = np.zeros((N, self.feature_dim ))
+                    D_onehot[np.arange(N), self.Node_degrees[i]] = 1
+                else:
+                    D_onehot = np.zeros((N, 1))
                 self.node_features.append(D_onehot)
+            if not degree_feature:
+                self.feature_dim = 1
         else:
             # Add 1 feature to support new colors at test time
             self.node_features = []
@@ -330,11 +345,13 @@ class GraphData(torch.utils.data.Dataset):
                  datareader,
                  fold_id,
                  split,  # train, val, train_val, test
+                 degree_feature=True,
                  attn_labels=None):
         self.fold_id = fold_id
         self.split = split
-
         self.w_sup_signal_attn = None
+        print('''The degree_feature argument is ignored for this dataset. 
+        It will automatically be set to True if nodes do not have any features. Otherwise it will be set to False''')
         if attn_labels is not None:
             if isinstance(attn_labels, str) and os.path.isfile(attn_labels):
                 with open(attn_labels, 'rb') as f:
@@ -411,111 +428,129 @@ class DataReader():
 
     def __init__(self,
                  data_dir,  # folder with txt files
-                 N_nodes,  # maximum number of nodes in the training set
+                 N_nodes=None,  # maximum number of nodes in the training set
                  rnd_state=None,
                  use_cont_node_attr=False, # use or not additional float valued node attributes available in some datasets
-                 folds=10):
+                 folds=10,
+                 fold_id=None):
 
         self.data_dir = data_dir
         self.rnd_state = np.random.RandomState() if rnd_state is None else rnd_state
         self.use_cont_node_attr = use_cont_node_attr
         self.N_nodes = N_nodes
-        files = os.listdir(self.data_dir)
-        data = {}
-        nodes, graphs = self.read_graph_nodes_relations(
-            list(filter(lambda f: f.find('graph_indicator') >= 0, files))[0])
-        lst = list(filter(lambda f: f.find('node_labels') >= 0, files))
-        if len(lst) > 0:
-            data['features'] = self.read_node_features(lst[0], nodes, graphs, fn=lambda s: int(s.strip()))
+        if os.path.isfile('%s/data.pkl' % data_dir):
+            print('loading data from %s/data.pkl' % data_dir)
+            with open('%s/data.pkl' % data_dir, 'rb') as f:
+                data = pickle.load(f)
         else:
-            data['features'] = None
-        data['adj_list'] = self.read_graph_adj(list(filter(lambda f: f.find('_A') >= 0, files))[0], nodes, graphs)
-        data['targets'] = np.array(
-            self.parse_txt_file(list(filter(lambda f: f.find('graph_labels') >= 0, files))[0],
-                                line_parse_fn=lambda s: int(float(s.strip()))))
-
-        if self.use_cont_node_attr:
-            data['attr'] = self.read_node_features(list(filter(lambda f: f.find('node_attributes') >= 0, files))[0],
-                                                   nodes, graphs,
-                                                   fn=lambda s: np.array(list(map(float, s.strip().split(',')))))
-
-        features, n_edges, degrees = [], [], []
-        for sample_id, adj in enumerate(data['adj_list']):
-            N = len(adj)  # number of nodes
-            if data['features'] is not None:
-                assert N == len(data['features'][sample_id]), (N, len(data['features'][sample_id]))
-            n = np.sum(adj)  # total sum of edges
-            # assert n % 2 == 0, n
-            n_edges.append(int(n / 2))  # undirected edges, so need to divide by 2
-            if not np.allclose(adj, adj.T):
-                print(sample_id, 'not symmetric')
-            degrees.extend(list(np.sum(adj, 1)))
-            if data['features'] is not None:
-                features.append(np.array(data['features'][sample_id]))
-
-        # Create features over graphs as one-hot vectors for each node
-        if data['features'] is not None:
-            features_all = np.concatenate(features)
-            features_min = features_all.min()
-            num_features = int(features_all.max() - features_min + 1)  # number of possible values
-
-            features_onehot = []
-            for i, x in enumerate(features):
-                feature_onehot = np.zeros((len(x), num_features))
-                for node, value in enumerate(x):
-                    feature_onehot[node, value - features_min] = 1
-                if self.use_cont_node_attr:
-                    feature_onehot = np.concatenate((feature_onehot, np.array(data['attr'][i])), axis=1)
-                features_onehot.append(feature_onehot)
+            files = os.listdir(self.data_dir)
+            data = {}
+            nodes, graphs = self.read_graph_nodes_relations(
+                list(filter(lambda f: f.find('graph_indicator') >= 0, files))[0])
+            lst = list(filter(lambda f: f.find('node_labels') >= 0, files))
+            if len(lst) > 0:
+                data['features'] = self.read_node_features(lst[0], nodes, graphs, fn=lambda s: int(s.strip()))
+            else:
+                data['features'] = None
+            data['adj_list'] = self.read_graph_adj(list(filter(lambda f: f.find('_A') >= 0, files))[0], nodes, graphs)
+            data['targets'] = np.array(
+                self.parse_txt_file(list(filter(lambda f: f.find('graph_labels') >= 0, files))[0],
+                                    line_parse_fn=lambda s: int(float(s.strip()))))
 
             if self.use_cont_node_attr:
-                num_features = features_onehot[0].shape[1]
-        else:
-            degree_max = int(np.max([np.sum(A, 1).max() for A in data['adj_list']]))
-            num_features = degree_max + 1
-            features_onehot = []
-            for A in data['adj_list']:
-                n = A.shape[0]
-                D = np.sum(A, 1).astype(np.int)
-                D_onehot = np.zeros((n, num_features))
-                D_onehot[np.arange(n), D] = 1
-                features_onehot.append(D_onehot)
+                data['attr'] = self.read_node_features(list(filter(lambda f: f.find('node_attributes') >= 0, files))[0],
+                                                       nodes, graphs,
+                                                       fn=lambda s: np.array(list(map(float, s.strip().split(',')))))
 
-        shapes = [len(adj) for adj in data['adj_list']]
-        labels = data['targets']  # graph class labels
-        labels -= np.min(labels)  # to start from 0
+            features, n_edges, degrees = [], [], []
+            for sample_id, adj in enumerate(data['adj_list']):
+                N = len(adj)  # number of nodes
+                if data['features'] is not None:
+                    assert N == len(data['features'][sample_id]), (N, len(data['features'][sample_id]))
+                n = np.sum(adj)  # total sum of edges
+                # assert n % 2 == 0, n
+                n_edges.append(int(n / 2))  # undirected edges, so need to divide by 2
+                if not np.allclose(adj, adj.T):
+                    print(sample_id, 'not symmetric')
+                degrees.extend(list(np.sum(adj, 1)))
+                if data['features'] is not None:
+                    features.append(np.array(data['features'][sample_id]))
 
-        classes = np.unique(labels)
-        num_classes = len(classes)
+            # Create features over graphs as one-hot vectors for each node
+            if data['features'] is not None:
+                features_all = np.concatenate(features)
+                features_min = features_all.min()
+                num_features = int(features_all.max() - features_min + 1)  # number of possible values
 
-        if not np.all(np.diff(classes) == 1):
-            print('making labels sequential, otherwise pytorch might crash')
-            labels_new = np.zeros(labels.shape, dtype=labels.dtype) - 1
-            for lbl in range(num_classes):
-                labels_new[labels == classes[lbl]] = lbl
-            labels = labels_new
+                features_onehot = []
+                for i, x in enumerate(features):
+                    feature_onehot = np.zeros((len(x), num_features))
+                    for node, value in enumerate(x):
+                        feature_onehot[node, value - features_min] = 1
+                    if self.use_cont_node_attr:
+                        feature_onehot = np.concatenate((feature_onehot, np.array(data['attr'][i])), axis=1)
+                    features_onehot.append(feature_onehot)
+
+                if self.use_cont_node_attr:
+                    num_features = features_onehot[0].shape[1]
+            else:
+                degree_max = int(np.max([np.sum(A, 1).max() for A in data['adj_list']]))
+                num_features = degree_max + 1
+                features_onehot = []
+                for A in data['adj_list']:
+                    n = A.shape[0]
+                    D = np.sum(A, 1).astype(np.int)
+                    D_onehot = np.zeros((n, num_features))
+                    D_onehot[np.arange(n), D] = 1
+                    features_onehot.append(D_onehot)
+
+            shapes = [len(adj) for adj in data['adj_list']]
+            labels = data['targets']  # graph class labels
+            labels -= np.min(labels)  # to start from 0
+
             classes = np.unique(labels)
-            assert len(np.unique(labels)) == num_classes, np.unique(labels)
+            num_classes = len(classes)
 
-        def stats(x):
-            return (np.mean(x), np.std(x), np.min(x), np.max(x))
+            if not np.all(np.diff(classes) == 1):
+                print('making labels sequential, otherwise pytorch might crash')
+                labels_new = np.zeros(labels.shape, dtype=labels.dtype) - 1
+                for lbl in range(num_classes):
+                    labels_new[labels == classes[lbl]] = lbl
+                labels = labels_new
+                classes = np.unique(labels)
+                assert len(np.unique(labels)) == num_classes, np.unique(labels)
 
-        print('N nodes avg/std/min/max: \t%.2f/%.2f/%d/%d' % stats(shapes))
-        print('N edges avg/std/min/max: \t%.2f/%.2f/%d/%d' % stats(n_edges))
-        print('Node degree avg/std/min/max: \t%.2f/%.2f/%d/%d' % stats(degrees))
-        print('Node features dim: \t\t%d' % num_features)
-        print('N classes: \t\t\t%d' % num_classes)
-        print('Classes: \t\t\t%s' % str(classes))
-        for lbl in classes:
-            print('Class %d: \t\t\t%d samples' % (lbl, np.sum(labels == lbl)))
+            def stats(x):
+                return (np.mean(x), np.std(x), np.min(x), np.max(x))
 
-        if data['features'] is not None:
-            for u in np.unique(features_all):
-                print('feature {}, count {}/{}'.format(u, np.count_nonzero(features_all == u), len(features_all)))
+            print('N nodes avg/std/min/max: \t%.2f/%.2f/%d/%d' % stats(shapes))
+            print('N edges avg/std/min/max: \t%.2f/%.2f/%d/%d' % stats(n_edges))
+            print('Node degree avg/std/min/max: \t%.2f/%.2f/%d/%d' % stats(degrees))
+            print('Node features dim: \t\t%d' % num_features)
+            print('N classes: \t\t\t%d' % num_classes)
+            print('Classes: \t\t\t%s' % str(classes))
+            for lbl in classes:
+                print('Class %d: \t\t\t%d samples' % (lbl, np.sum(labels == lbl)))
 
-        N_graphs = len(labels)  # number of samples (graphs) in data
-        assert N_graphs == len(data['adj_list']) == len(features_onehot), 'invalid data'
+            if data['features'] is not None:
+                for u in np.unique(features_all):
+                    print('feature {}, count {}/{}'.format(u, np.count_nonzero(features_all == u), len(features_all)))
 
+            N_graphs = len(labels)  # number of samples (graphs) in data
+            assert N_graphs == len(data['adj_list']) == len(features_onehot), 'invalid data'
+
+            data['features_onehot'] = features_onehot
+            data['targets'] = labels
+
+            data['N_nodes_max'] = np.max(shapes)  # max number of nodes
+            data['num_features'] = num_features
+            data['num_classes'] = num_classes
+
+            # Save preprocessed data for faster loading
+            with open('%s/data.pkl' % data_dir, 'wb') as f:
+                pickle.dump(data, f, protocol=2)
+
+        labels = data['targets']
         # Create test sets first
         N_graphs = len(labels)
         shapes = np.array([len(adj) for adj in data['adj_list']])
@@ -527,27 +562,33 @@ class DataReader():
             splits['train'].append(train_ids[fold])
             splits['val'].append(val_ids[fold])
 
-        data['features_onehot'] = features_onehot
-        data['targets'] = labels
         data['splits'] = splits
-        data['N_nodes_max'] = np.max(shapes)  # max number of nodes
-        data['num_features'] = num_features
-        data['num_classes'] = num_classes
 
         self.data = data
 
-    def split_ids_shape(self, ids_all, shapes, N_nodes, folds=1):
-        small_graphs_ind = np.where(shapes <= N_nodes)[0]
-        print('{}/{} graphs with at least {} nodes'.format(len(small_graphs_ind), len(shapes), N_nodes))
-        idx = self.rnd_state.permutation(len(small_graphs_ind))
-        if len(idx) > 1000:
-            n = 1000
+
+    def split_ids_shape(self, ids_all, shapes, N_nodes, folds=1, fold_id=0):
+        if N_nodes > 0:
+            small_graphs_ind = np.where(shapes <= N_nodes)[0]
+            print('{}/{} graphs with at least {} nodes'.format(len(small_graphs_ind), len(shapes), N_nodes))
+            idx = self.rnd_state.permutation(len(small_graphs_ind))
+            if len(idx) > 1000:
+                n = 1000
+            else:
+                n = 500
+            train_val_ids = small_graphs_ind[idx[:n]]
+            test_ids = small_graphs_ind[idx[n:]]
+            large_graphs_ind = np.where(shapes > N_nodes)[0]
+            test_ids = np.concatenate((test_ids, large_graphs_ind))
         else:
-            n = 500
-        train_val_ids = small_graphs_ind[idx[:n]]
-        test_ids = small_graphs_ind[idx[n:]]
-        large_graphs_ind = np.where(shapes > N_nodes)[0]
-        test_ids = np.concatenate((test_ids, large_graphs_ind))
+            idx = self.rnd_state.permutation(len(ids_all))
+            n = len(ids_all) // folds  # number of test samples
+            test_ids = ids_all[idx[fold_id * n: (fold_id + 1) * n if fold_id < folds - 1 else -1]]
+            train_val_ids = []
+            for i in ids_all:
+                if i not in test_ids:
+                    train_val_ids.append(i)
+            train_val_ids = np.array(train_val_ids)
 
         assert np.all(
             np.unique(np.concatenate((train_val_ids, test_ids))) == sorted(ids_all)), 'some graphs are missing in the test sets'

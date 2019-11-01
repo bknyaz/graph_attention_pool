@@ -7,9 +7,6 @@ This repository contains code to generate data and reproduce experiments from ou
 [An earlier short version](https://rlgm.github.io/papers/54.pdf) of our paper was presented as a **contributed talk** at [ICLR Workshop on Representation Learning on Graphs and Manifolds, 2019](https://rlgm.github.io/cfp/).
 
 
-**Update:** For COLLAB, PROTEINS and D&D for hyperparameter tuning we do a grid search in this repo, but we will release code using Bayesian optimization implemented in [Ax](https://github.com/facebook/Ax) soon, which shows better and more stable results.
-
-
 | MNIST |  TRIANGLES
 |:-------------------------:|:-------------------------:|
 | <figure> <img src="data/mnist_animation.gif" height="500"></figure> |  <figure> <img src="data/triangles_animation.gif" height="500"><figcaption></figcaption></figure> |

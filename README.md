@@ -4,6 +4,8 @@ This repository contains code to generate data and reproduce experiments from ou
 
 [Boris Knyazev, Graham W. Taylor, Mohamed R. Amer. Understanding Attention and Generalization in Graph Neural Networks](https://arxiv.org/abs/1905.02850).
 
+See slides [here](https://drive.google.com/open?id=1HcmhSEnf8ll6-BxXK1PiGzcXDa6BbKnC).
+
 [An earlier short version](https://rlgm.github.io/papers/54.pdf) of our paper was presented as a **contributed talk** at [ICLR Workshop on Representation Learning on Graphs and Manifolds, 2019](https://rlgm.github.io/cfp/).
 
 

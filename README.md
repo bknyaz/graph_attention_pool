@@ -223,7 +223,7 @@ Python packages required (can be installed via pip or conda):
 
 - python >= 3.6.1
 - PyTorch >= 0.4.1
-- [Ax](https://github.com/facebook/Ax) for hyper-parameter tuning on COLLAB, PROTEINS and D\&D 
+- [Ax](https://github.com/facebook/Ax) for hyper-parameter tuning on COLLAB, PROTEINS and D\&D
 - networkx
 - OpenCV
 - SciPy
@@ -235,20 +235,12 @@ Python packages required (can be installed via pip or conda):
 Please cite our paper if you use our data or code:
 
 ```
-@article{knyazev2019understanding,
-  title = {Understanding Attention and Generalization in Graph Neural Networks},
-  author = {Knyazev, Boris and Taylor, Graham W and Amer, Mohamed R},
-  journal = {arXiv preprint arXiv:1905.02850},
-  year = {2019}
-}
-```
-
-```
 @inproceedings{knyazev2019understanding,
-  author = {Boris Knyazev and Graham Taylor and Mohamed Amer},
-  title = {Understanding Attention in Graph Neural Networks},
-  booktitle = {International Conference on Learning Representations (ICLR) Workshop on Representation Learning on Graphs and Manifolds},
-  year = 2019,
-  pdf = {http://arxiv.org/abs/1905.02850}
+  title={Understanding Attention and Generalization in Graph Neural Networks},
+  author={Knyazev, Boris and Taylor, Graham W and Amer, Mohamed},
+  booktitle={Advances in Neural Information Processing Systems},
+  pages={4204--4214},
+  year={2019},
+  pdf={http://arxiv.org/abs/1905.02850}
 }
 ```

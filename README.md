@@ -240,10 +240,10 @@ Please cite our paper if you use our data or code:
 
 ```
 @inproceedings{knyazev2019understanding,
-  title={Understanding Attention and Generalization in Graph Neural Networks},
+  title={Understanding attention and generalization in graph neural networks},
   author={Knyazev, Boris and Taylor, Graham W and Amer, Mohamed},
   booktitle={Advances in Neural Information Processing Systems},
-  pages={4204--4214},
+  pages={4202--4212},
   year={2019},
   pdf={http://arxiv.org/abs/1905.02850}
 }
